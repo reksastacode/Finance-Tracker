@@ -1,4 +1,3 @@
-from PySide6 import QtWidgets, QtCore
+import Pyside6.Qtcore
 
-if __name__ == "__main__":
-    
+print(Pyside6.Qtcore.__version__)
