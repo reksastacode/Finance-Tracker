@@ -4,7 +4,7 @@ Uses QPainter and paintEvent to render multi-series charts (Pemasukan, Pengeluar
 Demonstrates visual lifecycle (paintEvent, resizeEvent) and event-driven data binding.
 """
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame
-from PySide6.QtCore import Qt, QPointF, Signal, Slot
+from PySide6.QtCore import Qt, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from src.core.constants import AppColors
 

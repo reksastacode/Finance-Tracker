@@ -4,7 +4,7 @@ Implements the main dashboard page, connecting UI components to DashboardViewMod
 via PySide6 Signals & Slots.
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea, QGridLayout, QProgressBar
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QScrollArea, QProgressBar
 )
 from PySide6.QtCore import Qt, Slot
 from src.core.constants import AppColors

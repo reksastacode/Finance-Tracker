@@ -5,7 +5,7 @@ category creation, editing, and deletion.
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QGridLayout, QScrollArea, QDialog, QLineEdit, QTextEdit
+    QGridLayout, QScrollArea, QDialog, QLineEdit
 )
 from PySide6.QtCore import Qt, Slot, Signal
 from src.core.constants import AppColors, TransactionType

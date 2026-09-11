@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QMenu
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QCursor
+from PySide6.QtGui import QAction
 from src.core.constants import AppColors
 
 class TargetCardWidget(QFrame):

@@ -5,7 +5,7 @@ creation, editing, and deletion events.
 """
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
-from src.core.mock_data import mock_store, TransactionType, CategoryModel
+from src.core.mock_data import mock_store, TransactionType
 
 class CategoryViewModel(BaseViewModel):
     # Signals for View

@@ -5,7 +5,7 @@ and interactive data table with running balances and deletion actions.
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit, QScrollArea
+    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit
 )
 from PySide6.QtCore import Qt, QDate, Slot
 from src.core.constants import AppColors, TransactionType

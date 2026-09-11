@@ -3,7 +3,6 @@ Dashboard ViewModel.
 Manages summary calculations, chart series data, calendar aggregates,
 and recent activity feeds through PySide6 Signals and Slots.
 """
-from datetime import datetime, date
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType

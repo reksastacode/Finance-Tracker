@@ -2,11 +2,9 @@
 Header Component.
 Displays page titles, subtitles, and fixed-height formatted date badge.
 """
-from datetime import date
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
 from PySide6.QtCore import Qt
 from src.core.constants import AppColors
-from src.core.utils import format_indonesian_date
 
 class HeaderWidget(QWidget):
     def __init__(self, title: str, subtitle: str, parent=None):

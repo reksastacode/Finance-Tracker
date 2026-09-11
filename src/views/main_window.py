@@ -4,10 +4,9 @@ Orchestrates the sidebar navigation, page switching inside QStackedWidget,
 and global toast notifications.
 """
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QFrame
+    QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 )
-from PySide6.QtCore import Qt, Slot, QPoint
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Slot
 
 from src.core.constants import AppColors
 from src.core.event_bus import event_bus

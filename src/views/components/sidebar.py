@@ -4,10 +4,9 @@ Implements the green sidebar with rounded corners, dark green header box,
 and reactive item selection matching the design UI.
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QSpacerItem, QSizePolicy
+    QWidget, QVBoxLayout, QPushButton, QLabel, QFrame, QSpacerItem, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QFont, QColor
 from src.core.constants import AppColors
 
 class SidebarButton(QPushButton):

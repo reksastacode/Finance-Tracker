@@ -5,7 +5,6 @@ Demonstrates QPropertyAnimation and QTimer event handling in PySide6.
 """
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QGraphicsOpacityEffect
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Slot
-from src.core.constants import AppColors
 
 class ToastWidget(QFrame):
     def __init__(self, message: str, toast_type: str = "success", parent=None):

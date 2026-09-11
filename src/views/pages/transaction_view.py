@@ -4,14 +4,11 @@ Provides the form for adding income or expense records.
 Demonstrates input listeners, live character counter, dynamic dropdown population,
 and form lifecycle events.
 """
-from datetime import date
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QTextEdit,
-    QPushButton, QFrame, QDateEdit, QSpacerItem, QSizePolicy
-)
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QComboBox, QPushButton, QFrame, QDateEdit)
 from PySide6.QtCore import Qt, QDate, Slot
 from src.core.constants import AppColors, TransactionType
-from src.core.utils import format_short_date, parse_rupiah, format_rupiah
 from src.viewmodels.transaction_viewmodel import TransactionViewModel
 from src.views.components.header import HeaderWidget
 

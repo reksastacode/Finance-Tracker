@@ -3,7 +3,6 @@ History ViewModel.
 Manages transaction history table rendering, multi-criteria filtering,
 running balance calculations, and deletion events.
 """
-from datetime import datetime
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType
