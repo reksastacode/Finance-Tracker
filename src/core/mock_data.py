@@ -4,8 +4,8 @@ Holds state for testing all Event-Driven mechanisms in UI and ViewModels
 without requiring Database/ORM layer.
 """
 from dataclasses import dataclass, field
-from datetime import datetime, date
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from typing import List
 import uuid
 
 from src.core.constants import TransactionType, TargetPriority
