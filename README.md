@@ -42,24 +42,7 @@ Berdasarkan dokumen desain Figma/PDF:
    - Kartu target dengan badge prioritas (*Tinggi*, *Sedang*, *Rendah*) dan progress bar.
    - Modal **Isi Target**: Alokasi tabungan langsung dari saldo tersedia dengan validasi live.
    - Tips Menabung dan riwayat aktivitas alokasi terbaru.
-
----
-
-## Implementasi Event-Driven Programming 
-
-1. **Signal & Slot PySide6 (MVVM Communication)**:
-   - View hanya mendengarkan Signal dari ViewModel dan memicu Slot di ViewModel saat terjadi interaksi user.
-   - View bebas dari manipulasi data langsung.
-2. **Global EventBus (`src/core/event_bus.py`)**:
-   - Memfasilitasi komunikasi lintas-komponen yang terisolasi.
-   - Sinyal `data_changed` menyinkronkan data di Dashboard, Riwayat, dan Target secara instan saat ada transaksi atau alokasi baru.
-   - Sinyal `toast_requested` memicu animasi banner non-blocking di `MainWindow`.
-3. **Visual Component Lifecycle**:
-   - `showEvent`: Memastikan data terbaru ditarik saat halaman ditampilkan di `QStackedWidget`.
-   - `paintEvent` & `resizeEvent`: Merender grafik garis mulus (*cubic bezier curve*) dan kalender tanpa lag.
-4. **Timer & Animation Events**:
-   - `QPropertyAnimation` dan `QTimer` digunakan untuk transisi fade-in/out dan auto-dismiss notifikasi Toast.
-
+     
 ---
 
 ## 🚀 Cara Menjalankan Aplikasi
