@@ -1,6 +1,6 @@
 # Keuangan Mandiri - Personal Finance Tracker (PySide6 MVVM)
 
-Aplikasi desktop tracking keuangan berbasis **Python** dan **PySide6** dengan arsitektur **MVVM (Model-View-ViewModel)** dan fokus implementasi **Event-Driven Programming (Topik Pertemuan 4 RPS Pemrograman Visual)**.
+Aplikasi desktop tracking keuangan berbasis **Python** dan **PySide6** dengan arsitektur **MVVM (Model-View-ViewModel)**.
 
 ---
 
