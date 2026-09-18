@@ -11,7 +11,7 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtWidgets import QApplication
-from src.core.constants import TransactionType
+from src.core.constants import TransactionType, TargetPriority
 from src.core.event_bus import event_bus
 from src.core.mock_data import mock_store
 from src.viewmodels.dashboard_viewmodel import DashboardViewModel
