@@ -1,11 +1,10 @@
-# Keuangan Mandiri - Personal Finance Tracker (PySide6 MVVM)
+# Keuangan Mandiri - Personal Finance Tracker 
 
 Aplikasi desktop tracking keuangan berbasis **Python** dan **PySide6** dengan arsitektur **MVVM (Model-View-ViewModel)**.
 
 ---
 
 ## Palet Warna & Desain UI
-Berdasarkan dokumen desain Figma/PDF:
 - **Sidebar**: `#A8BFA3` (Sage green)
 - **Background**: `#F7F5F0` (Soft warm white)
 - **Card**: `#FFFFFF` (Pure white)
@@ -50,9 +49,4 @@ Berdasarkan dokumen desain Figma/PDF:
 ### 1. Menjalankan Aplikasi Desktop:
 ```bash
 python main.py
-```
-
-### 2. Menjalankan Automated Test Suite (Event-Driven & MVVM):
-```bash
-python -m unittest discover tests
 ```
