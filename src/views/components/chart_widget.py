@@ -12,11 +12,11 @@ class ChartCanvas(QWidget):
     """Inner canvas rendering lines and points via paintEvent."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.labels = ["1 Sep 2026", "5 Sep 2026", "10 Sep 2026", "15 Sep 2026", "20 Sep 2026", "25 Sep 2026"]
-        self.pemasukan = [1.0, 1.2, 2.0, 1.5, 2.2, 1.8]
-        self.pengeluaran = [0.8, 0.9, 1.8, 1.9, 1.4, 2.7]
-        self.target = [0.5, 1.5, 2.7, 3.8, 4.8, 5.2]
-        self.max_val = 6.0
+        self.labels = ["1 Sep", "2 Sep", "3 Sep", "4 Sep", "5 Sep", "6 Sep", "7 Sep"]
+        self.pemasukan = [1.0, 0.2, 0.8, 1.5, 0.4, 0.9, 1.8]
+        self.pengeluaran = [0.3, 0.7, 0.2, 0.8, 0.5, 1.2, 0.6]
+        self.target = [0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.8]
+        self.max_val = 3.5
 
     def set_data(self, labels, pemasukan, pengeluaran, target, max_val=6.0):
         self.labels = labels
@@ -70,6 +70,7 @@ class ChartCanvas(QWidget):
                 py = top_pad + plot_h - (val / self.max_val * plot_h)
                 points.append(QPointF(px, py))
 
+            # Build smooth path
             path = QPainterPath()
             path.moveTo(points[0])
             for i in range(len(points) - 1):
@@ -84,24 +85,44 @@ class ChartCanvas(QWidget):
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(path)
 
+            # Draw points (draw selectively if many points to avoid crowding)
             dot_brush = QBrush(QColor(hex_color))
             white_pen = QPen(QColor("#FFFFFF"), 2)
             painter.setPen(white_pen)
             painter.setBrush(dot_brush)
-            for pt in points:
-                painter.drawEllipse(pt, 4, 4)
+            
+            total_pts = len(points)
+            for idx, pt in enumerate(points):
+                # If total points > 15, show key markers (every 4-5 days and end points)
+                if total_pts > 15:
+                    if idx == 0 or idx == total_pts - 1 or idx % 5 == 4:
+                        painter.drawEllipse(pt, 3.5, 3.5)
+                else:
+                    painter.drawEllipse(pt, 3.5, 3.5)
 
         draw_series(self.target, AppColors.TARGET)
         draw_series(self.pengeluaran, AppColors.PENGELUARAN)
         draw_series(self.pemasukan, AppColors.PEMASUKAN)
 
-        # X Labels
+        # X-Axis Labels Rendering
         if self.labels:
-            step_x = plot_w / (len(self.labels) - 1) if len(self.labels) > 1 else plot_w
+            total_lbls = len(self.labels)
+            step_x = plot_w / (total_lbls - 1) if total_lbls > 1 else plot_w
             painter.setPen(QPen(QColor(AppColors.TEXT_SECONDARY)))
-            for idx, lbl in enumerate(self.labels):
-                px = left_pad + idx * step_x
-                painter.drawText(int(px - 40), int(h - bottom_pad + 6), 80, 20, Qt.AlignCenter, lbl)
+            painter.setFont(QFont("Segoe UI", 9))
+
+            if total_lbls > 12:
+                # For 30 days (Bulan ini), show clean distributed date markers (e.g. 1 Sep, 5 Sep, 10 Sep, 15 Sep, 20 Sep, 25 Sep, 30 Sep)
+                for idx in range(total_lbls):
+                    if idx == 0 or idx == total_lbls - 1 or idx % 5 == 4:
+                        lbl = self.labels[idx]
+                        px = left_pad + idx * step_x
+                        painter.drawText(int(px - 35), int(h - bottom_pad + 6), 70, 20, Qt.AlignCenter, lbl)
+            else:
+                # For 7 days (Minggu ini) or 12 months (Tahun ini), show all labels
+                for idx, lbl in enumerate(self.labels):
+                    px = left_pad + idx * step_x
+                    painter.drawText(int(px - 35), int(h - bottom_pad + 6), 70, 20, Qt.AlignCenter, lbl)
 
 
 class ChartWidget(QFrame):

@@ -31,7 +31,7 @@ from src.views.pages.target_view import TargetView
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Keuangan Mandiri - Personal Finance Tracker (MVVM)")
+        self.setWindowTitle("Personal Finance Tracker")
         self.setMinimumSize(1150, 740)
         self.resize(1200, 780)
 

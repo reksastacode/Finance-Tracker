@@ -6,7 +6,7 @@ and recent activity feeds through PySide6 Signals and Slots.
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType
-from src.core.utils import format_rupiah, format_short_date, format_compact_rupiah
+from src.core.utils import format_rupiah
 
 class DashboardViewModel(BaseViewModel):
     # Signals to notify View
@@ -34,7 +34,6 @@ class DashboardViewModel(BaseViewModel):
         saldo = mock_store.get_current_balance()
         pemasukan = mock_store.get_total_pemasukan()
         pengeluaran = mock_store.get_total_pengeluaran()
-        # Sum of active targets collected or total targets
         total_target = sum(t.collected_amount for t in mock_store.targets[:3]) or 5_000_000
 
         data = {
@@ -52,20 +51,36 @@ class DashboardViewModel(BaseViewModel):
     def _update_chart(self):
         """Generates chart points based on selected period."""
         if self._current_chart_period == "Minggu ini":
-            labels = ["1 Sep 2026", "5 Sep 2026", "10 Sep 2026", "15 Sep 2026", "20 Sep 2026", "25 Sep 2026"]
-            pemasukan_series = [1.0, 1.2, 2.0, 1.5, 2.2, 1.8]     # in millions
-            pengeluaran_series = [0.8, 0.9, 1.8, 1.9, 1.4, 2.7]
-            target_series = [0.5, 1.5, 2.7, 3.8, 4.8, 5.2]
+            # 7 days from the start of the month (1 Sep - 7 Sep)
+            labels = ["1 Sep", "2 Sep", "3 Sep", "4 Sep", "5 Sep", "6 Sep", "7 Sep"]
+            pemasukan_series = [1.0, 0.2, 0.8, 1.5, 0.4, 0.9, 1.8]     # in millions
+            pengeluaran_series = [0.3, 0.7, 0.2, 0.8, 0.5, 1.2, 0.6]
+            target_series = [0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.8]
+            max_val = 3.5
         elif self._current_chart_period == "Bulan ini":
-            labels = ["Mgg 1", "Mgg 2", "Mgg 3", "Mgg 4"]
-            pemasukan_series = [2.0, 3.5, 2.8, 4.2]
-            pengeluaran_series = [1.5, 2.2, 2.9, 3.1]
-            target_series = [1.0, 2.5, 3.9, 5.0]
+            # 30 days of the month (1 to 30 September)
+            labels = [f"{i} Sep" for i in range(1, 31)]
+            # Realistic monthly trend data spanning 30 days
+            pemasukan_series = [
+                1.0, 0.2, 0.5, 1.2, 0.3, 0.0, 1.5, 0.8, 0.4, 2.0,
+                0.5, 0.2, 0.8, 1.0, 3.5, 0.6, 0.2, 0.4, 1.2, 0.8,
+                1.5, 0.3, 0.6, 2.2, 0.7, 1.0, 0.4, 1.8, 0.5, 2.5
+            ]
+            pengeluaran_series = [
+                0.4, 0.6, 0.3, 0.8, 0.2, 0.5, 0.9, 0.4, 0.7, 1.5,
+                0.3, 0.8, 0.5, 0.6, 1.8, 0.4, 0.7, 0.3, 0.9, 1.2,
+                0.6, 0.4, 0.8, 1.4, 0.5, 0.8, 0.3, 1.1, 0.7, 1.6
+            ]
+            target_series = [
+                round(0.2 + (i * 0.16), 2) for i in range(30)
+            ]
+            max_val = 6.0
         else: # Tahun ini
-            labels = ["Jan", "Mar", "Mei", "Jul", "Sep", "Nov"]
-            pemasukan_series = [5.0, 7.0, 6.5, 9.0, 10.0, 12.0]
-            pengeluaran_series = [3.0, 4.5, 4.0, 6.0, 5.5, 7.0]
-            target_series = [2.0, 4.0, 6.0, 8.0, 10.0, 15.0]
+            labels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"]
+            pemasukan_series = [5.0, 6.2, 7.0, 6.5, 8.0, 9.0, 8.5, 10.0, 11.5, 10.0, 12.0, 14.0]
+            pengeluaran_series = [3.0, 3.8, 4.5, 4.0, 5.2, 6.0, 5.5, 6.8, 7.0, 6.5, 7.8, 8.5]
+            target_series = [1.5, 2.8, 4.0, 5.5, 7.0, 8.5, 9.8, 11.2, 12.5, 13.8, 15.0, 16.5]
+            max_val = 18.0
 
         payload = {
             "period": self._current_chart_period,
@@ -73,13 +88,12 @@ class DashboardViewModel(BaseViewModel):
             "pemasukan": pemasukan_series,
             "pengeluaran": pengeluaran_series,
             "target": target_series,
-            "max_val": 6.0 if self._current_chart_period == "Minggu ini" else (6.0 if self._current_chart_period == "Bulan ini" else 16.0)
+            "max_val": max_val
         }
         self.chart_data_updated.emit(payload)
 
     def _update_calendar(self):
         """Calendar daily aggregate tags."""
-        # Simulated tag mapping for day of month (September 2026)
         day_events = {
             1: [{"type": "Pengeluaran", "label": "-Rp80k", "color": "#C98787"}],
             4: [{"type": "Target", "label": "$Rp790k", "color": "#A99ABF"}],
