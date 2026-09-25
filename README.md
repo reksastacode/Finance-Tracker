@@ -44,7 +44,7 @@ Aplikasi desktop tracking keuangan berbasis **Python** dan **PySide6** dengan ar
      
 ---
 
-## 🚀 Cara Menjalankan Aplikasi
+##  Cara Menjalankan Aplikasi
 
 ### 1. Menjalankan Aplikasi Desktop:
 ```bash
