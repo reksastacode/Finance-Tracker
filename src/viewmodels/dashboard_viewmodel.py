@@ -1,12 +1,14 @@
 """
 Dashboard ViewModel.
 Manages summary calculations, chart series data, calendar aggregates,
-and recent activity feeds through PySide6 Signals and Slots.
+and recent activity feeds through PySide6 Signals and Slots based on current system date.
 """
+from datetime import date, timedelta
+import calendar
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType
-from src.core.utils import format_rupiah
+from src.core.utils import format_rupiah, BULAN_SINGKAT, BULAN
 
 class DashboardViewModel(BaseViewModel):
     # Signals to notify View
@@ -19,8 +21,9 @@ class DashboardViewModel(BaseViewModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_chart_period = "Minggu ini"
-        self._calendar_year = 2026
-        self._calendar_month = 9  # September 2026 per mock
+        today = date.today()
+        self._calendar_year = today.year
+        self._calendar_month = today.month
 
     def refresh(self):
         """Refreshes all dashboard metrics and emits change signals."""
@@ -49,37 +52,58 @@ class DashboardViewModel(BaseViewModel):
         self.summary_updated.emit(data)
 
     def _update_chart(self):
-        """Generates chart points based on selected period."""
+        """Generates chart series dynamically up to the current computer date."""
+        today = date.today()
+        current_day = today.day
+        current_month = today.month
+        current_year = today.year
+        month_abbr = BULAN_SINGKAT[current_month - 1]
+
         if self._current_chart_period == "Minggu ini":
-            # 7 days from the start of the month (1 Sep - 7 Sep)
-            labels = ["1 Sep", "2 Sep", "3 Sep", "4 Sep", "5 Sep", "6 Sep", "7 Sep"]
-            pemasukan_series = [1.0, 0.2, 0.8, 1.5, 0.4, 0.9, 1.8]     # in millions
-            pengeluaran_series = [0.3, 0.7, 0.2, 0.8, 0.5, 1.2, 0.6]
-            target_series = [0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.8]
+            # Current calendar week (Monday to Sunday)
+            start_of_week = today - timedelta(days=today.weekday())
+            labels = []
+            for i in range(7):
+                d = start_of_week + timedelta(days=i)
+                labels.append(f"{d.day} {BULAN_SINGKAT[d.month - 1]}")
+
+            # Days elapsed in current week (Monday=1 .. Sunday=7)
+            cutoff = today.weekday() + 1
+
+            seed_p = [1.2, 0.8, 1.5, 0.4, 1.8, 0.9, 2.2]
+            seed_k = [0.5, 0.7, 0.3, 0.8, 1.2, 0.6, 1.0]
+            seed_t = [0.6, 0.9, 1.3, 1.7, 2.1, 2.5, 2.8]
+
+            pemasukan_series = seed_p[:cutoff]
+            pengeluaran_series = seed_k[:cutoff]
+            target_series = seed_t[:cutoff]
             max_val = 3.5
+
         elif self._current_chart_period == "Bulan ini":
-            # 30 days of the month (1 to 30 September)
-            labels = [f"{i} Sep" for i in range(1, 31)]
-            # Realistic monthly trend data spanning 30 days
-            pemasukan_series = [
-                1.0, 0.2, 0.5, 1.2, 0.3, 0.0, 1.5, 0.8, 0.4, 2.0,
-                0.5, 0.2, 0.8, 1.0, 3.5, 0.6, 0.2, 0.4, 1.2, 0.8,
-                1.5, 0.3, 0.6, 2.2, 0.7, 1.0, 0.4, 1.8, 0.5, 2.5
-            ]
-            pengeluaran_series = [
-                0.4, 0.6, 0.3, 0.8, 0.2, 0.5, 0.9, 0.4, 0.7, 1.5,
-                0.3, 0.8, 0.5, 0.6, 1.8, 0.4, 0.7, 0.3, 0.9, 1.2,
-                0.6, 0.4, 0.8, 1.4, 0.5, 0.8, 0.3, 1.1, 0.7, 1.6
-            ]
-            target_series = [
-                round(0.2 + (i * 0.16), 2) for i in range(30)
-            ]
-            max_val = 6.0
+            # Days in the current month (e.g. 30 or 31 days)
+            num_days = calendar.monthrange(current_year, current_month)[1]
+            labels = [f"{d} {month_abbr}" for d in range(1, num_days + 1)]
+            cutoff = max(1, min(current_day, num_days))
+
+            seed_p = [1.0, 0.2, 0.5, 1.2, 0.3, 0.0, 1.5, 0.8, 0.4, 2.0, 0.5, 0.2, 0.8, 1.0, 3.5, 0.6, 0.2, 0.4, 1.2, 0.8, 1.5, 0.3, 0.6, 2.2, 0.7, 1.0, 0.4, 1.8, 0.5, 2.5, 1.2]
+            seed_k = [0.4, 0.6, 0.3, 0.8, 0.2, 0.5, 0.9, 0.4, 0.7, 1.5, 0.3, 0.8, 0.5, 0.6, 1.8, 0.4, 0.7, 0.3, 0.9, 1.2, 0.6, 0.4, 0.8, 1.4, 0.5, 0.8, 0.3, 1.1, 0.7, 1.6, 0.9]
+
+            pemasukan_series = [seed_p[i % len(seed_p)] for i in range(cutoff)]
+            pengeluaran_series = [seed_k[i % len(seed_k)] for i in range(cutoff)]
+            target_series = [round(0.2 + (i * 0.15), 2) for i in range(cutoff)]
+            max_val = 5.0
+
         else: # Tahun ini
-            labels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"]
-            pemasukan_series = [5.0, 6.2, 7.0, 6.5, 8.0, 9.0, 8.5, 10.0, 11.5, 10.0, 12.0, 14.0]
-            pengeluaran_series = [3.0, 3.8, 4.5, 4.0, 5.2, 6.0, 5.5, 6.8, 7.0, 6.5, 7.8, 8.5]
-            target_series = [1.5, 2.8, 4.0, 5.5, 7.0, 8.5, 9.8, 11.2, 12.5, 13.8, 15.0, 16.5]
+            labels = list(BULAN_SINGKAT)
+            cutoff = max(1, min(current_month, 12))
+
+            seed_p = [5.0, 6.2, 7.0, 6.5, 8.0, 9.0, 8.5, 10.0, 11.5, 10.0, 12.0, 14.0]
+            seed_k = [3.0, 3.8, 4.5, 4.0, 5.2, 6.0, 5.5, 6.8, 7.0, 6.5, 7.8, 8.5]
+            seed_t = [1.5, 2.8, 4.0, 5.5, 7.0, 8.5, 9.8, 11.2, 12.5, 13.8, 15.0, 16.5]
+
+            pemasukan_series = seed_p[:cutoff]
+            pengeluaran_series = seed_k[:cutoff]
+            target_series = seed_t[:cutoff]
             max_val = 18.0
 
         payload = {
@@ -93,7 +117,9 @@ class DashboardViewModel(BaseViewModel):
         self.chart_data_updated.emit(payload)
 
     def _update_calendar(self):
-        """Calendar daily aggregate tags."""
+        """Calendar daily aggregate tags based on active month."""
+        month_name = f"{BULAN[self._calendar_month - 1]} {self._calendar_year}"
+        
         day_events = {
             1: [{"type": "Pengeluaran", "label": "-Rp80k", "color": "#C98787"}],
             4: [{"type": "Target", "label": "$Rp790k", "color": "#A99ABF"}],
@@ -110,7 +136,7 @@ class DashboardViewModel(BaseViewModel):
         self.calendar_data_updated.emit({
             "year": self._calendar_year,
             "month": self._calendar_month,
-            "month_name": "September 2026",
+            "month_name": month_name,
             "events": day_events
         })
 

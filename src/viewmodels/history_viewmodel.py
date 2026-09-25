@@ -6,7 +6,7 @@ running balance calculations, and deletion events.
 from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType
-from src.core.utils import format_rupiah, parse_rupiah
+from src.core.utils import format_rupiah
 
 class HistoryViewModel(BaseViewModel):
     # Signals
