@@ -80,7 +80,7 @@ class TransactionInputView(QWidget):
         card_layout.addWidget(QLabel("Tanggal", styleSheet="font-size: 12px; font-weight: 600; color: #4A5568;"))
         self.tanggal_edit = QDateEdit()
         self.tanggal_edit.setCalendarPopup(True)
-        self.tanggal_edit.setDate(QDate(2026, 7, 25)) # Mock date per design
+        self.tanggal_edit.setDate(QDate.currentDate())
         self.tanggal_edit.setDisplayFormat("dd/MM/yyyy")
         self.tanggal_edit.setFixedHeight(38)
         card_layout.addWidget(self.tanggal_edit)
