@@ -1,6 +1,6 @@
 """
 Application Stylesheet (QSS) for Keuangan Mandiri.
-Implements modern UI styling based on the design PDF palette.
+Implements modern UI styling
 """
 from src.core.constants import AppColors
 
