@@ -142,7 +142,7 @@ class DashboardViewModel(BaseViewModel):
 
     def _update_recent_transactions(self):
         recent = []
-        for tx in mock_store.transactions[:3]:
+        for tx in mock_store.transactions[:6]:
             if tx.type == TransactionType.PEMASUKAN:
                 amount_str = f"+{format_rupiah(tx.amount)}"
                 color = "#7FAE8A"
@@ -166,7 +166,7 @@ class DashboardViewModel(BaseViewModel):
 
     def _update_targets_preview(self):
         preview = []
-        for t in mock_store.targets[:2]:
+        for t in mock_store.targets[:4]:
             percent = int((t.collected_amount / t.target_amount) * 100) if t.target_amount > 0 else 0
             preview.append({
                 "id": t.id,

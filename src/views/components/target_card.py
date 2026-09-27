@@ -1,13 +1,10 @@
-"""
-Target Card Component.
-Renders target progress, priority badge, amounts, and handles button events.
-"""
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QMenu
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QAction
 from src.core.constants import AppColors
+from src.core.assets import AppIcons, get_svg_icon
 
 class TargetCardWidget(QFrame):
     isi_target_clicked = Signal(str)      # target_id
@@ -114,7 +111,9 @@ class TargetCardWidget(QFrame):
         btm_layout.addStretch()
 
         # Isi Target button
-        isi_btn = QPushButton("Isi Target")
+        isi_btn = QPushButton("  Isi Target")
+        isi_btn.setIcon(get_svg_icon(AppIcons.TARGET_ISI, 14, 14))
+        isi_btn.setIconSize(QSize(14, 14))
         isi_btn.setCursor(Qt.PointingHandCursor)
         isi_btn.setStyleSheet(f"""
             QPushButton {{
@@ -175,10 +174,10 @@ class TargetCardWidget(QFrame):
                 background-color: #F7F5F0;
             }
         """)
-        edit_action = QAction("Edit target", self)
+        edit_action = QAction(get_svg_icon(AppIcons.CAT_EDIT, 14, 14), "  Edit target", self)
         edit_action.triggered.connect(lambda: self.edit_target_clicked.emit(self.target_data.get("id", "")))
 
-        delete_action = QAction("Hapus target", self)
+        delete_action = QAction(get_svg_icon(AppIcons.CAT_DELETE, 14, 14), "  Hapus target", self)
         delete_action.triggered.connect(lambda: self.delete_target_clicked.emit(self.target_data.get("id", "")))
 
         menu.addAction(edit_action)

@@ -7,8 +7,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QGridLayout, QScrollArea, QDialog, QLineEdit
 )
-from PySide6.QtCore import Qt, Slot, Signal
+from PySide6.QtCore import Qt, Slot, Signal, QSize
 from src.core.constants import AppColors, TransactionType
+from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.category_viewmodel import CategoryViewModel
 from src.views.components.header import HeaderWidget
 
@@ -161,7 +162,9 @@ class CategoryCard(QFrame):
         act_layout.setSpacing(8)
         act_layout.addStretch()
 
-        edit_btn = QPushButton("✏️")
+        edit_btn = QPushButton()
+        edit_btn.setIcon(get_svg_icon(AppIcons.CAT_EDIT, 14, 14))
+        edit_btn.setIconSize(QSize(14, 14))
         edit_btn.setFixedSize(28, 26)
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.setStyleSheet("""
@@ -169,7 +172,6 @@ class CategoryCard(QFrame):
                 background-color: #FFB74D;
                 border-radius: 6px;
                 border: none;
-                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #FFA726;
@@ -177,7 +179,9 @@ class CategoryCard(QFrame):
         """)
         edit_btn.clicked.connect(lambda: self.edit_clicked.emit(self.cat_data))
 
-        del_btn = QPushButton("🗑️")
+        del_btn = QPushButton()
+        del_btn.setIcon(get_svg_icon(AppIcons.CAT_DELETE, 14, 14))
+        del_btn.setIconSize(QSize(14, 14))
         del_btn.setFixedSize(28, 26)
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet("""
@@ -185,7 +189,6 @@ class CategoryCard(QFrame):
                 background-color: #E57373;
                 border-radius: 6px;
                 border: none;
-                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #EF5350;

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from src.core.constants import AppColors
 from src.core.utils import BULAN
+from src.core.assets import AppIcons, create_svg_label
 
 class CalendarWidget(QFrame):
     month_changed = Signal(int, int)
@@ -25,7 +26,7 @@ class CalendarWidget(QFrame):
 
     def _setup_ui(self):
         self.setProperty("class", "card")
-        self.setFixedHeight(310)
+        self.setFixedHeight(340)
         self.setStyleSheet(f"""
             CalendarWidget {{
                 background-color: {AppColors.CARD_BG};
@@ -46,8 +47,7 @@ class CalendarWidget(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
 
-        title_icon = QLabel("📅")
-        title_icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        title_icon = create_svg_label(AppIcons.DASHBOARD_KALENDER, 20, 20)
         title = QLabel("Kalender Transaksi")
         title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
 
@@ -60,8 +60,8 @@ class CalendarWidget(QFrame):
         month_items = [f"{m} {self.year}" for m in BULAN]
         self.month_combo.addItems(month_items)
         self.month_combo.setCurrentIndex(max(0, self.month - 1))
-        self.month_combo.setFixedWidth(165)
-        self.month_combo.setFixedHeight(32)
+        self.month_combo.setFixedWidth(195)
+        self.month_combo.setFixedHeight(34)
         self.month_combo.currentIndexChanged.connect(self._on_month_combo_changed)
         header_layout.addWidget(self.month_combo)
 
@@ -96,7 +96,7 @@ class CalendarWidget(QFrame):
         self.grid_widget.setStyleSheet("background: transparent; border: none;")
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 2, 0, 0)
-        self.grid_layout.setSpacing(2)
+        self.grid_layout.setSpacing(3)
 
         layout.addWidget(self.grid_widget)
         layout.addStretch()
@@ -126,12 +126,12 @@ class CalendarWidget(QFrame):
         for col, day_name in enumerate(days):
             hdr = QLabel(day_name)
             hdr.setAlignment(Qt.AlignCenter)
-            hdr.setFixedHeight(22)
+            hdr.setFixedHeight(24)
             hdr.setStyleSheet(f"""
                 QLabel {{
                     background-color: #D6E3D3;
                     color: {AppColors.SIDEBAR_TEXT};
-                    font-size: 10px;
+                    font-size: 11px;
                     font-weight: 700;
                     border-radius: 4px;
                     border: none;
@@ -146,7 +146,7 @@ class CalendarWidget(QFrame):
         for row_idx, week in enumerate(month_days):
             for col_idx, day_num in enumerate(week):
                 cell = QFrame()
-                cell.setFixedHeight(30)
+                cell.setFixedHeight(34)
                 cell.setStyleSheet(f"""
                     QFrame {{
                         background-color: {'#FFFFFF' if day_num > 0 else 'transparent'};
@@ -155,12 +155,12 @@ class CalendarWidget(QFrame):
                     }}
                 """)
                 cell_layout = QVBoxLayout(cell)
-                cell_layout.setContentsMargins(2, 2, 2, 2)
+                cell_layout.setContentsMargins(3, 2, 3, 2)
                 cell_layout.setSpacing(0)
 
                 if day_num > 0:
                     day_lbl = QLabel(str(day_num))
-                    day_lbl.setStyleSheet(f"font-size: 9px; color: {AppColors.TEXT_PRIMARY}; font-weight: 600; background: transparent; border: none;")
+                    day_lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_PRIMARY}; font-weight: 600; background: transparent; border: none;")
                     cell_layout.addWidget(day_lbl, 0, Qt.AlignLeft | Qt.AlignTop)
 
                     # Check for event tag
@@ -170,7 +170,7 @@ class CalendarWidget(QFrame):
                             tag_lbl = QLabel(ev["label"])
                             tag_lbl.setStyleSheet(f"""
                                 QLabel {{
-                                    font-size: 8px;
+                                    font-size: 9px;
                                     color: {ev['color']};
                                     font-weight: bold;
                                     background: transparent;

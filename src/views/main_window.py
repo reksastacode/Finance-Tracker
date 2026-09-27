@@ -32,8 +32,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Personal Finance Tracker")
-        self.setMinimumSize(1150, 740)
-        self.resize(1200, 780)
+        self.setMinimumSize(1150, 720)
+        self.resize(1366, 780)
 
         self._init_viewmodels()
         self._setup_ui()

@@ -47,7 +47,7 @@ class ChartCanvas(QWidget):
 
         # Y-Grid and labels
         y_steps = 6
-        painter.setFont(QFont("Segoe UI", 9))
+        painter.setFont(QFont("Segoe UI", 10))
         
         for i in range(y_steps + 1):
             val = (self.max_val / y_steps) * i
@@ -58,7 +58,7 @@ class ChartCanvas(QWidget):
 
             painter.setPen(QPen(QColor(AppColors.TEXT_SECONDARY)))
             label_str = f"{int(val)} jt" if val.is_integer() else f"{val:.1f} jt"
-            painter.drawText(0, int(y_pos - 6), int(left_pad - 6), 14, Qt.AlignRight | Qt.AlignVCenter, label_str)
+            painter.drawText(0, int(y_pos - 7), int(left_pad - 6), 16, Qt.AlignRight | Qt.AlignVCenter, label_str)
 
         # Draw series function
         def draw_series(data, hex_color):
@@ -85,7 +85,7 @@ class ChartCanvas(QWidget):
                     ctrl2 = QPointF(p1.x() - step_x / 2, p1.y())
                     path.cubicTo(ctrl1, ctrl2, p1)
 
-                pen = QPen(QColor(hex_color), 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+                pen = QPen(QColor(hex_color), 3.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
                 painter.setPen(pen)
                 painter.setBrush(Qt.NoBrush)
                 painter.drawPath(path)
@@ -100,9 +100,9 @@ class ChartCanvas(QWidget):
             for idx, pt in enumerate(points):
                 if total_pts > 15:
                     if idx == 0 or idx == total_pts - 1 or idx % 5 == 4:
-                        painter.drawEllipse(pt, 3.5, 3.5)
+                        painter.drawEllipse(pt, 4.5, 4.5)
                 else:
-                    painter.drawEllipse(pt, 3.5, 3.5)
+                    painter.drawEllipse(pt, 4.5, 4.5)
 
         draw_series(self.target, AppColors.TARGET)
         draw_series(self.pengeluaran, AppColors.PENGELUARAN)
@@ -113,7 +113,7 @@ class ChartCanvas(QWidget):
             total_lbls = len(self.labels)
             step_x = plot_w / (total_lbls - 1) if total_lbls > 1 else plot_w
             painter.setPen(QPen(QColor(AppColors.TEXT_SECONDARY)))
-            painter.setFont(QFont("Segoe UI", 9))
+            painter.setFont(QFont("Segoe UI", 10))
 
             if total_lbls > 12:
                 for idx in range(total_lbls):
@@ -136,7 +136,7 @@ class ChartWidget(QFrame):
 
     def _setup_ui(self):
         self.setProperty("class", "card")
-        self.setFixedHeight(310)
+        self.setFixedHeight(340)
         self.setStyleSheet(f"""
             ChartWidget {{
                 background-color: {AppColors.CARD_BG};
@@ -184,8 +184,8 @@ class ChartWidget(QFrame):
         # Period Dropdown
         self.period_combo = QComboBox()
         self.period_combo.addItems(["Minggu ini", "Bulan ini", "Tahun ini"])
-        self.period_combo.setFixedWidth(125)
-        self.period_combo.setFixedHeight(32)
+        self.period_combo.setFixedWidth(150)
+        self.period_combo.setFixedHeight(34)
         self.period_combo.currentTextChanged.connect(self.period_changed.emit)
         header_layout.addWidget(self.period_combo)
 

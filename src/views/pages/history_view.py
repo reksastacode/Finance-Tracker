@@ -7,8 +7,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit
 )
-from PySide6.QtCore import Qt, QDate, Slot
+from PySide6.QtCore import Qt, QDate, Slot, QSize
 from src.core.constants import AppColors, TransactionType
+from src.core.assets import AppIcons, get_svg_icon
 from src.viewmodels.history_viewmodel import HistoryViewModel
 from src.views.components.header import HeaderWidget
 from src.views.components.summary_card import SummaryCardWidget
@@ -33,10 +34,10 @@ class HistoryView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp. 10.000.000", "⬆", AppColors.PEMASUKAN)
-        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp. 3.200.000", "⬇", AppColors.PENGELUARAN)
-        self.card_saldo_bersih = SummaryCardWidget("Saldo Bersih", "Rp. 6.800.000", "⚖️", "#E6AF2E")
-        self.card_total_tx = SummaryCardWidget("Jumlah Transaksi", "12 Transaksi", "📄", "#5C6BC0")
+        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp. 10.000.000", svg_icon=AppIcons.HIST_PEMASUKAN)
+        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp. 3.200.000", svg_icon=AppIcons.HIST_PENGELUARAN)
+        self.card_saldo_bersih = SummaryCardWidget("Saldo Bersih", "Rp. 6.800.000", svg_icon=AppIcons.HIST_SALDO_BERSIH)
+        self.card_total_tx = SummaryCardWidget("Jumlah Transaksi", "12 Transaksi", svg_icon=AppIcons.HIST_JUMLAH_TX)
 
         summary_row.addWidget(self.card_pemasukan)
         summary_row.addWidget(self.card_pengeluaran)
@@ -103,7 +104,9 @@ class HistoryView(QWidget):
         f_layout.addLayout(c4, 1)
 
         # Filter Button
-        self.filter_btn = QPushButton("🔍 FILTER")
+        self.filter_btn = QPushButton("  FILTER")
+        self.filter_btn.setIcon(get_svg_icon(AppIcons.HIST_FILTER, 16, 16))
+        self.filter_btn.setIconSize(QSize(16, 16))
         self.filter_btn.setCursor(Qt.PointingHandCursor)
         self.filter_btn.setFixedHeight(34)
         self.filter_btn.setStyleSheet(f"""
@@ -142,8 +145,13 @@ class HistoryView(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
 
         main_layout.addWidget(self.table)
 
@@ -180,6 +188,16 @@ class HistoryView(QWidget):
 
     @Slot(list)
     def _on_transactions_updated(self, transactions: list):
+        if not transactions:
+            self.table.setRowCount(1)
+            empty_item = QTableWidgetItem("Tidak ada catatan transaksi yang sesuai dengan filter.")
+            empty_item.setTextAlignment(Qt.AlignCenter)
+            empty_item.setFlags(Qt.ItemIsEnabled)
+            self.table.setItem(0, 0, empty_item)
+            self.table.setSpan(0, 0, 1, 7)
+            return
+
+        self.table.clearSpans()
         self.table.setRowCount(len(transactions))
         for row, tx in enumerate(transactions):
             # Tanggal
@@ -212,7 +230,9 @@ class HistoryView(QWidget):
             self.table.setItem(row, 5, s_item)
 
             # Aksi: Delete Button
-            del_btn = QPushButton("🗑️")
+            del_btn = QPushButton()
+            del_btn.setIcon(get_svg_icon(AppIcons.CAT_DELETE, 14, 14))
+            del_btn.setIconSize(QSize(14, 14))
             del_btn.setFixedSize(26, 24)
             del_btn.setCursor(Qt.PointingHandCursor)
             del_btn.setStyleSheet("""
@@ -220,7 +240,6 @@ class HistoryView(QWidget):
                     background-color: #FFCDD2;
                     border-radius: 4px;
                     border: none;
-                    font-size: 10px;
                 }
                 QPushButton:hover {
                     background-color: #EF9A9A;

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Slot
 from src.core.constants import AppColors
+from src.core.assets import AppIcons, create_svg_label
 from src.core.event_bus import event_bus
 from src.viewmodels.dashboard_viewmodel import DashboardViewModel
 from src.views.components.header import HeaderWidget
@@ -45,10 +46,10 @@ class DashboardView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_saldo = SummaryCardWidget("Saldo Saat Ini", "Rp 12.000.000", "$", AppColors.PEMASUKAN)
-        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp 1.000.000", "⬆", AppColors.PEMASUKAN)
-        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp 800.000", "⬇", AppColors.PENGELUARAN)
-        self.card_target = SummaryCardWidget("Total Target", "Rp 5.000.000", "🎯", AppColors.TARGET)
+        self.card_saldo = SummaryCardWidget("Saldo Saat Ini", "Rp 12.000.000", svg_icon=AppIcons.DASHBOARD_SALDO)
+        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp 1.000.000", svg_icon=AppIcons.DASHBOARD_PEMASUKAN)
+        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp 800.000", svg_icon=AppIcons.DASHBOARD_PENGELUARAN)
+        self.card_target = SummaryCardWidget("Total Target", "Rp 5.000.000", svg_icon=AppIcons.DASHBOARD_TOTAL_TARGET)
 
         summary_row.addWidget(self.card_saldo)
         summary_row.addWidget(self.card_pemasukan)
@@ -56,24 +57,14 @@ class DashboardView(QWidget):
         summary_row.addWidget(self.card_target)
         layout.addLayout(summary_row)
 
-        # 3. Middle Row: Chart (Left) + Calendar (Right)
+        # 3. Middle Row: Target Keuangan (Left) + Transaksi Terbaru (Right)
         mid_row = QHBoxLayout()
         mid_row.setSpacing(14)
 
-        self.chart_widget = ChartWidget()
-        self.calendar_widget = CalendarWidget()
-
-        mid_row.addWidget(self.chart_widget, 3)
-        mid_row.addWidget(self.calendar_widget, 2)
-        layout.addLayout(mid_row)
-
-        # 4. Bottom Row: Target Keuangan (Left) + Transaksi Terbaru (Right)
-        btm_row = QHBoxLayout()
-        btm_row.setSpacing(14)
-
-        # Bottom Left: Target Keuangan Card
+        # Middle Left: Target Keuangan Card
         self.target_box = QFrame()
         self.target_box.setProperty("class", "card")
+        self.target_box.setFixedHeight(320)
         self.target_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {AppColors.CARD_BG};
@@ -90,7 +81,7 @@ class DashboardView(QWidget):
         tb_layout.setSpacing(10)
 
         tb_hdr = QHBoxLayout()
-        tb_icon = QLabel("🎯")
+        tb_icon = create_svg_label(AppIcons.DASHBOARD_TARGET_CARD, 22, 22)
         tb_title = QLabel("Target Keuangan")
         tb_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
         tb_hdr.addWidget(tb_icon)
@@ -103,10 +94,10 @@ class DashboardView(QWidget):
             QPushButton {{
                 background-color: {AppColors.PRIMARY_BUTTON};
                 color: #FFFFFF;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: 700;
                 border-radius: 6px;
-                padding: 4px 12px;
+                padding: 5px 14px;
                 border: none;
             }}
             QPushButton:hover {{
@@ -117,14 +108,25 @@ class DashboardView(QWidget):
         tb_hdr.addWidget(see_all_target_btn)
         tb_layout.addLayout(tb_hdr)
 
-        self.target_items_layout = QVBoxLayout()
+        # Scroll area for target items
+        t_scroll = QScrollArea()
+        t_scroll.setWidgetResizable(True)
+        t_scroll.setFrameShape(QFrame.NoFrame)
+        t_scroll.setStyleSheet("background: transparent; border: none;")
+        t_container = QWidget()
+        t_container.setStyleSheet("background: transparent;")
+        self.target_items_layout = QVBoxLayout(t_container)
+        self.target_items_layout.setContentsMargins(0, 0, 4, 0)
         self.target_items_layout.setSpacing(10)
-        tb_layout.addLayout(self.target_items_layout)
-        btm_row.addWidget(self.target_box, 1)
+        t_scroll.setWidget(t_container)
+        tb_layout.addWidget(t_scroll)
 
-        # Bottom Right: Transaksi Terbaru Card
+        mid_row.addWidget(self.target_box, 1)
+
+        # Middle Right: Transaksi Terbaru Card
         self.recent_box = QFrame()
         self.recent_box.setProperty("class", "card")
+        self.recent_box.setFixedHeight(320)
         self.recent_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {AppColors.CARD_BG};
@@ -141,7 +143,7 @@ class DashboardView(QWidget):
         rb_layout.setSpacing(10)
 
         rb_hdr = QHBoxLayout()
-        rb_icon = QLabel("📋")
+        rb_icon = create_svg_label(AppIcons.DASHBOARD_RECENT_TX, 22, 22)
         rb_title = QLabel("Transaksi Terbaru")
         rb_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {AppColors.TEXT_PRIMARY};")
         rb_hdr.addWidget(rb_icon)
@@ -154,10 +156,10 @@ class DashboardView(QWidget):
             QPushButton {{
                 background-color: {AppColors.PRIMARY_BUTTON};
                 color: #FFFFFF;
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: 700;
                 border-radius: 6px;
-                padding: 4px 12px;
+                padding: 5px 14px;
                 border: none;
             }}
             QPushButton:hover {{
@@ -168,11 +170,32 @@ class DashboardView(QWidget):
         rb_hdr.addWidget(see_all_hist_btn)
         rb_layout.addLayout(rb_hdr)
 
-        self.recent_items_layout = QVBoxLayout()
+        # Scroll area for recent transaction items
+        r_scroll = QScrollArea()
+        r_scroll.setWidgetResizable(True)
+        r_scroll.setFrameShape(QFrame.NoFrame)
+        r_scroll.setStyleSheet("background: transparent; border: none;")
+        r_container = QWidget()
+        r_container.setStyleSheet("background: transparent;")
+        self.recent_items_layout = QVBoxLayout(r_container)
+        self.recent_items_layout.setContentsMargins(0, 0, 4, 0)
         self.recent_items_layout.setSpacing(8)
-        rb_layout.addLayout(self.recent_items_layout)
-        btm_row.addWidget(self.recent_box, 1)
+        r_scroll.setWidget(r_container)
+        rb_layout.addWidget(r_scroll)
 
+        mid_row.addWidget(self.recent_box, 1)
+
+        layout.addLayout(mid_row)
+
+        # 4. Bottom Row: Chart (Left) + Calendar (Right)
+        btm_row = QHBoxLayout()
+        btm_row.setSpacing(14)
+
+        self.chart_widget = ChartWidget()
+        self.calendar_widget = CalendarWidget()
+
+        btm_row.addWidget(self.chart_widget, 3)
+        btm_row.addWidget(self.calendar_widget, 2)
         layout.addLayout(btm_row)
 
         scroll.setWidget(container)
@@ -210,34 +233,53 @@ class DashboardView(QWidget):
             if child.widget():
                 child.widget().deleteLater()
 
+        if not targets:
+            empty_lbl = QLabel("Belum ada target keuangan aktif.")
+            empty_lbl.setAlignment(Qt.AlignCenter)
+            empty_lbl.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY}; padding: 30px;")
+            self.target_items_layout.addWidget(empty_lbl)
+            self.target_items_layout.addStretch()
+            return
+
         for t in targets:
             item = QFrame()
-            item.setStyleSheet("background: #FAF8F5; border-radius: 8px; border: 1px solid #F0EDE6;")
+            item.setStyleSheet("background: #FAF8F5; border-radius: 10px; border: 1px solid #F0EDE6;")
             il = QHBoxLayout(item)
-            il.setContentsMargins(10, 8, 10, 8)
-            il.setSpacing(10)
+            il.setContentsMargins(12, 10, 12, 10)
+            il.setSpacing(12)
 
             # Left Col
             left_c = QVBoxLayout()
-            left_c.setSpacing(2)
+            left_c.setSpacing(3)
             name_l = QLabel(t["name"])
-            name_l.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {AppColors.TEXT_PRIMARY};")
+            name_l.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {AppColors.TEXT_PRIMARY};")
             amt_l = QLabel(f"{t['collected_formatted']} / {t['target_formatted']}")
-            amt_l.setStyleSheet(f"font-size: 11px; color: {AppColors.TEXT_SECONDARY};")
+            amt_l.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY};")
             left_c.addWidget(name_l)
             left_c.addWidget(amt_l)
 
             # Middle Col: Progress
             mid_c = QVBoxLayout()
-            mid_c.setSpacing(2)
+            mid_c.setSpacing(3)
             pbar = QProgressBar()
             pbar.setRange(0, 100)
             pbar.setValue(t["progress_percent"])
             pbar.setTextVisible(False)
-            pbar.setFixedHeight(5)
+            pbar.setFixedHeight(8)
+            pbar.setStyleSheet(f"""
+                QProgressBar {{
+                    background-color: #EDF2F7;
+                    border: none;
+                    border-radius: 4px;
+                }}
+                QProgressBar::chunk {{
+                    background-color: {AppColors.TARGET};
+                    border-radius: 4px;
+                }}
+            """)
             pct_l = QLabel(f"{t['progress_percent']}%")
             pct_l.setAlignment(Qt.AlignCenter)
-            pct_l.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600;")
+            pct_l.setStyleSheet(f"font-size: 11px; color: {AppColors.TEXT_SECONDARY}; font-weight: 700;")
             mid_c.addWidget(pbar)
             mid_c.addWidget(pct_l)
 
@@ -248,10 +290,10 @@ class DashboardView(QWidget):
                 QPushButton {{
                     background-color: {AppColors.TARGET};
                     color: #FFFFFF;
-                    font-size: 11px;
+                    font-size: 12px;
                     font-weight: 700;
                     border-radius: 6px;
-                    padding: 4px 10px;
+                    padding: 6px 14px;
                     border: none;
                 }}
                 QPushButton:hover {{
@@ -266,6 +308,8 @@ class DashboardView(QWidget):
             il.addWidget(isi_btn)
             self.target_items_layout.addWidget(item)
 
+        self.target_items_layout.addStretch()
+
     @Slot(list)
     def _on_recent_tx_updated(self, transactions: list):
         while self.recent_items_layout.count():
@@ -273,37 +317,45 @@ class DashboardView(QWidget):
             if child.widget():
                 child.widget().deleteLater()
 
+        if not transactions:
+            empty_lbl = QLabel("Belum ada catatan transaksi.")
+            empty_lbl.setAlignment(Qt.AlignCenter)
+            empty_lbl.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY}; padding: 30px;")
+            self.recent_items_layout.addWidget(empty_lbl)
+            self.recent_items_layout.addStretch()
+            return
+
         for tx in transactions:
             row = QFrame()
             row.setStyleSheet("background: transparent; border-bottom: 1px solid #F0EDE6;")
             rl = QHBoxLayout(row)
-            rl.setContentsMargins(4, 6, 4, 6)
-            rl.setSpacing(10)
+            rl.setContentsMargins(6, 8, 6, 8)
+            rl.setSpacing(12)
 
             # Icon
             icon_str = "⬆" if tx["type"] == "Pemasukan" else ("⬇" if tx["type"] == "Pengeluaran" else "🎯")
             icon_lbl = QLabel(icon_str)
-            icon_lbl.setStyleSheet(f"color: {tx['color']}; font-size: 13px; font-weight: bold;")
+            icon_lbl.setStyleSheet(f"color: {tx['color']}; font-size: 14px; font-weight: bold;")
 
             # Title & Subtitle
             t_col = QVBoxLayout()
-            t_col.setSpacing(1)
+            t_col.setSpacing(2)
             title = QLabel(tx["title"])
-            title.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {AppColors.TEXT_PRIMARY};")
+            title.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {AppColors.TEXT_PRIMARY};")
             cat_type = QLabel(f"{tx['category']} • {tx['type']}")
-            cat_type.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY};")
+            cat_type.setStyleSheet(f"font-size: 11px; color: {AppColors.TEXT_SECONDARY};")
             t_col.addWidget(title)
             t_col.addWidget(cat_type)
 
             # Amount & Date
             r_col = QVBoxLayout()
-            r_col.setSpacing(1)
+            r_col.setSpacing(2)
             amt = QLabel(tx["amount_formatted"])
             amt.setAlignment(Qt.AlignRight)
-            amt.setStyleSheet(f"font-size: 12px; font-weight: 800; color: {tx['color']};")
+            amt.setStyleSheet(f"font-size: 13px; font-weight: 800; color: {tx['color']};")
             dt = QLabel(tx["date"])
             dt.setAlignment(Qt.AlignRight)
-            dt.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY};")
+            dt.setStyleSheet(f"font-size: 11px; color: {AppColors.TEXT_SECONDARY};")
             r_col.addWidget(amt)
             r_col.addWidget(dt)
 
@@ -313,3 +365,5 @@ class DashboardView(QWidget):
             rl.addLayout(r_col)
 
             self.recent_items_layout.addWidget(row)
+
+        self.recent_items_layout.addStretch()

@@ -7,11 +7,12 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame,
 from PySide6.QtCore import Qt
 from src.core.constants import AppColors
 from src.core.utils import format_indonesian_date
+from src.core.assets import AppIcons, create_svg_label
 
 class HeaderWidget(QWidget):
     def __init__(self, title: str, subtitle: str, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(54)
+        self.setFixedHeight(60)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self._setup_ui(title, subtitle)
 
@@ -26,7 +27,7 @@ class HeaderWidget(QWidget):
         left_layout.setSpacing(2)
 
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet(f"font-size: 22px; font-weight: 800; color: {AppColors.TEXT_PRIMARY}; letter-spacing: 0.5px; background: transparent; border: none;")
+        self.title_label.setStyleSheet("font-size: 24px; font-weight: 800; color: #587352; letter-spacing: 0.5px; background: transparent; border: none;")
 
         self.subtitle_label = QLabel(subtitle)
         self.subtitle_label.setStyleSheet(f"font-size: 13px; color: {AppColors.TEXT_SECONDARY}; background: transparent; border: none;")
@@ -39,13 +40,13 @@ class HeaderWidget(QWidget):
 
         # Right: Fixed-size Date Badge with Calendar Icon showing real computer date
         date_badge = QFrame()
-        date_badge.setFixedHeight(36)
+        date_badge.setFixedHeight(42)
         date_badge.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         date_badge.setStyleSheet(f"""
             QFrame {{
                 background-color: #FFFFFF;
                 border: 1px solid {AppColors.BORDER_CARD};
-                border-radius: 8px;
+                border-radius: 10px;
             }}
             QLabel {{
                 background: transparent;
@@ -53,15 +54,14 @@ class HeaderWidget(QWidget):
             }}
         """)
         date_layout = QHBoxLayout(date_badge)
-        date_layout.setContentsMargins(12, 4, 12, 4)
-        date_layout.setSpacing(8)
+        date_layout.setContentsMargins(14, 6, 14, 6)
+        date_layout.setSpacing(10)
 
-        cal_icon = QLabel("📅")
-        cal_icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        cal_icon = create_svg_label(AppIcons.DASHBOARD_KALENDER, 18, 18)
 
         # Use current system date
         self.date_text = QLabel(format_indonesian_date(date.today()))
-        self.date_text.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
+        self.date_text.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
 
         date_layout.addWidget(cal_icon)
         date_layout.addWidget(self.date_text)

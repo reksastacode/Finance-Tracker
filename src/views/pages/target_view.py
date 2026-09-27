@@ -7,8 +7,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QGridLayout, QScrollArea, QDialog, QLineEdit, QComboBox, QDateEdit
 )
-from PySide6.QtCore import Qt, QDate, Slot
+from PySide6.QtCore import Qt, QDate, Slot, QSize
 from src.core.constants import AppColors, TargetPriority
+from src.core.assets import AppIcons, create_svg_label, get_svg_icon
 from src.core.event_bus import event_bus
 from src.core.utils import format_rupiah, parse_rupiah
 from src.viewmodels.target_viewmodel import TargetViewModel
@@ -77,7 +78,12 @@ class TargetFormDialog(QDialog):
 
         c1 = QVBoxLayout()
         c1.setSpacing(2)
-        c1.addWidget(QLabel("Target Mulai", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        c1_hdr = QHBoxLayout()
+        c1_hdr.setSpacing(4)
+        c1_hdr.addWidget(create_svg_label(AppIcons.TARGET_TANGGAL, 14, 14))
+        c1_hdr.addWidget(QLabel("Target Mulai", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        c1_hdr.addStretch()
+        c1.addLayout(c1_hdr)
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDate(QDate.currentDate())
@@ -87,7 +93,12 @@ class TargetFormDialog(QDialog):
 
         c2 = QVBoxLayout()
         c2.setSpacing(2)
-        c2.addWidget(QLabel("Deadline / Tanggal Target", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        c2_hdr = QHBoxLayout()
+        c2_hdr.setSpacing(4)
+        c2_hdr.addWidget(create_svg_label(AppIcons.TARGET_TANGGAL, 14, 14))
+        c2_hdr.addWidget(QLabel("Deadline / Target Selesai", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        c2_hdr.addStretch()
+        c2.addLayout(c2_hdr)
         self.deadline_date_edit = QDateEdit()
         self.deadline_date_edit.setCalendarPopup(True)
         self.deadline_date_edit.setDate(QDate(2027, 12, 25))
@@ -100,7 +111,10 @@ class TargetFormDialog(QDialog):
         # Priority
         box_layout.addWidget(QLabel("Prioritas Target", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
         self.prio_combo = QComboBox()
-        self.prio_combo.addItems([TargetPriority.SEDANG, TargetPriority.TINGGI, TargetPriority.RENDAH])
+        self.prio_combo.setIconSize(QSize(16, 16))
+        self.prio_combo.addItem(get_svg_icon(AppIcons.TARGET_PRIORITY_SEDANG, 16, 16), TargetPriority.SEDANG)
+        self.prio_combo.addItem(get_svg_icon(AppIcons.TARGET_PRIORITY_TINGGI, 16, 16), TargetPriority.TINGGI)
+        self.prio_combo.addItem(get_svg_icon(AppIcons.TARGET_PRIORITY_RENDAH, 16, 16), TargetPriority.RENDAH)
         if self.edit_data:
             self.prio_combo.setCurrentText(self.edit_data.get("priority", TargetPriority.SEDANG))
         box_layout.addWidget(self.prio_combo)
@@ -197,10 +211,10 @@ class TargetView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_total_aktif = SummaryCardWidget("Total Target", "6 Aktif", "🎯", AppColors.TARGET)
-        self.card_goal_amount = SummaryCardWidget("Total Target Keuangan", "Rp. 18.111.000", "💰", "#E57373")
-        self.card_terkumpul = SummaryCardWidget("Terkumpul", "Rp. 5.100.000", "👛", "#FFB74D")
-        self.card_progress_total = SummaryCardWidget("Seluruh Progress", "20% Dari Target", "📈", "#81C784")
+        self.card_total_aktif = SummaryCardWidget("Total Target", "6 Aktif", svg_icon=AppIcons.TARGET_TOTAL)
+        self.card_goal_amount = SummaryCardWidget("Total Target Keuangan", "Rp. 18.111.000", svg_icon=AppIcons.TARGET_TOTAL)
+        self.card_terkumpul = SummaryCardWidget("Terkumpul", "Rp. 5.100.000", svg_icon=AppIcons.TARGET_TERKUMPUL)
+        self.card_progress_total = SummaryCardWidget("Seluruh Progress", "20% Dari Target", svg_icon=AppIcons.TARGET_PROGRESS)
 
         summary_row.addWidget(self.card_total_aktif)
         summary_row.addWidget(self.card_goal_amount)
@@ -261,7 +275,7 @@ class TargetView(QWidget):
         tips_l.setSpacing(8)
 
         t_hdr = QHBoxLayout()
-        t_icon = QLabel("💡")
+        t_icon = create_svg_label(AppIcons.TARGET_TIPS, 18, 18)
         t_title = QLabel("TIPS MENABUNG")
         t_title.setStyleSheet(f"font-size: 12px; font-weight: 800; color: #F59E0B;")
         t_hdr.addWidget(t_icon)
@@ -291,7 +305,7 @@ class TargetView(QWidget):
         act_l.setSpacing(8)
 
         act_hdr = QHBoxLayout()
-        act_icon = QLabel("🕒")
+        act_icon = create_svg_label(AppIcons.TARGET_AKTIVITAS, 18, 18)
         act_title = QLabel("Aktivitas Terbaru")
         act_title.setStyleSheet(f"font-size: 12px; font-weight: 800; color: {AppColors.TEXT_PRIMARY};")
         act_hdr.addWidget(act_icon)

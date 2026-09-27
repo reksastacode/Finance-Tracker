@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from src.core.constants import AppColors
+from src.core.assets import AppIcons, create_svg_label
 from src.core.mock_data import mock_store
 from src.core.utils import format_rupiah, parse_rupiah
 
@@ -41,8 +42,7 @@ class IsiTargetDialog(QDialog):
 
         # 1. Header with Close Button
         hdr_layout = QHBoxLayout()
-        hdr_icon = QLabel("🎯")
-        hdr_icon.setStyleSheet("font-size: 16px;")
+        hdr_icon = create_svg_label(AppIcons.TARGET_ISI, 20, 20)
         hdr_title = QLabel("Isi Target")
         hdr_title.setStyleSheet(f"font-size: 16px; font-weight: 800; color: {AppColors.TEXT_PRIMARY};")
         hdr_layout.addWidget(hdr_icon)
@@ -144,8 +144,7 @@ class IsiTargetDialog(QDialog):
         s_layout.setContentsMargins(12, 8, 12, 8)
         s_layout.setSpacing(10)
 
-        wallet_icon = QLabel("👛")
-        wallet_icon.setStyleSheet("font-size: 14px;")
+        wallet_icon = create_svg_label(AppIcons.TARGET_SALDO_TERSEDIA, 20, 20)
         
         saldo_txt_layout = QVBoxLayout()
         saldo_txt_layout.setSpacing(1)

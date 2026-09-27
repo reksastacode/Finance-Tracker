@@ -7,8 +7,9 @@ and form lifecycle events.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QComboBox, QPushButton, QFrame, QDateEdit)
-from PySide6.QtCore import Qt, QDate, Slot
+from PySide6.QtCore import Qt, QDate, Slot, QSize
 from src.core.constants import AppColors, TransactionType
+from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.transaction_viewmodel import TransactionViewModel
 from src.views.components.header import HeaderWidget
 
@@ -58,8 +59,9 @@ class TransactionInputView(QWidget):
         # Field 1: Jenis Transaksi
         card_layout.addWidget(QLabel("Jenis transaksi", styleSheet="font-size: 12px; font-weight: 600; color: #4A5568;"))
         self.jenis_combo = QComboBox()
-        self.jenis_combo.addItem("⬆  Pemasukan", TransactionType.PEMASUKAN)
-        self.jenis_combo.addItem("⬇  Pengeluaran", TransactionType.PENGELUARAN)
+        self.jenis_combo.setIconSize(QSize(18, 18))
+        self.jenis_combo.addItem(get_svg_icon(AppIcons.TX_PEMASUKAN, 18, 18), "  Pemasukan", TransactionType.PEMASUKAN)
+        self.jenis_combo.addItem(get_svg_icon(AppIcons.TX_PENGELUARAN, 18, 18), "  Pengeluaran", TransactionType.PENGELUARAN)
         self.jenis_combo.setFixedHeight(38)
         card_layout.addWidget(self.jenis_combo)
 
@@ -77,7 +79,13 @@ class TransactionInputView(QWidget):
         card_layout.addWidget(self.kategori_combo)
 
         # Field 4: Tanggal
-        card_layout.addWidget(QLabel("Tanggal", styleSheet="font-size: 12px; font-weight: 600; color: #4A5568;"))
+        tgl_hdr = QHBoxLayout()
+        tgl_hdr.setSpacing(6)
+        tgl_hdr.addWidget(create_svg_label(AppIcons.TX_TANGGAL, 16, 16))
+        tgl_hdr.addWidget(QLabel("Tanggal", styleSheet="font-size: 12px; font-weight: 600; color: #4A5568;"))
+        tgl_hdr.addStretch()
+        card_layout.addLayout(tgl_hdr)
+
         self.tanggal_edit = QDateEdit()
         self.tanggal_edit.setCalendarPopup(True)
         self.tanggal_edit.setDate(QDate.currentDate())
