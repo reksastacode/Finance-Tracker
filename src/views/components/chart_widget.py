@@ -1,7 +1,7 @@
 """
 Custom Financial Line Chart Component.
 Uses QPainter and paintEvent to render multi-series charts (Pemasukan, Pengeluaran, Target).
-Demonstrates visual lifecycle (paintEvent, resizeEvent) and event-driven data binding.
+Draws points up to the current computer date without inaccurate extrapolation.
 """
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame
 from PySide6.QtCore import Qt, QPointF, Signal
@@ -13,9 +13,9 @@ class ChartCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.labels = ["1 Sep", "2 Sep", "3 Sep", "4 Sep", "5 Sep", "6 Sep", "7 Sep"]
-        self.pemasukan = [1.0, 0.2, 0.8, 1.5, 0.4, 0.9, 1.8]
-        self.pengeluaran = [0.3, 0.7, 0.2, 0.8, 0.5, 1.2, 0.6]
-        self.target = [0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.8]
+        self.pemasukan = [1.0, 0.2, 0.8]
+        self.pengeluaran = [0.3, 0.7, 0.2]
+        self.target = [0.5, 0.8, 1.2]
         self.max_val = 3.5
 
     def set_data(self, labels, pemasukan, pengeluaran, target, max_val=6.0):
@@ -23,7 +23,8 @@ class ChartCanvas(QWidget):
         self.pemasukan = pemasukan
         self.pengeluaran = pengeluaran
         self.target = target
-        self.max_val = max(max_val, max(pemasukan + pengeluaran + target + [1.0]))
+        all_vals = [v for v in (pemasukan + pengeluaran + target) if v is not None]
+        self.max_val = max(max_val, max(all_vals + [1.0]))
         self.update()  # Triggers paintEvent
 
     def paintEvent(self, event):
@@ -59,41 +60,44 @@ class ChartCanvas(QWidget):
             label_str = f"{int(val)} jt" if val.is_integer() else f"{val:.1f} jt"
             painter.drawText(0, int(y_pos - 6), int(left_pad - 6), 14, Qt.AlignRight | Qt.AlignVCenter, label_str)
 
-        # Draw series
+        # Draw series function
         def draw_series(data, hex_color):
-            if not data or len(data) < 2:
+            if not data:
                 return
-            step_x = plot_w / (len(data) - 1)
+            total_slots = len(self.labels)
+            step_x = plot_w / (total_slots - 1) if total_slots > 1 else plot_w
             points = []
             for idx, val in enumerate(data):
+                if val is None:
+                    continue
                 px = left_pad + idx * step_x
                 py = top_pad + plot_h - (val / self.max_val * plot_h)
                 points.append(QPointF(px, py))
 
-            # Build smooth path
-            path = QPainterPath()
-            path.moveTo(points[0])
-            for i in range(len(points) - 1):
-                p0 = points[i]
-                p1 = points[i + 1]
-                ctrl1 = QPointF(p0.x() + step_x / 2, p0.y())
-                ctrl2 = QPointF(p1.x() - step_x / 2, p1.y())
-                path.cubicTo(ctrl1, ctrl2, p1)
+            # Draw line curve if 2 or more points
+            if len(points) >= 2:
+                path = QPainterPath()
+                path.moveTo(points[0])
+                for i in range(len(points) - 1):
+                    p0 = points[i]
+                    p1 = points[i + 1]
+                    ctrl1 = QPointF(p0.x() + step_x / 2, p0.y())
+                    ctrl2 = QPointF(p1.x() - step_x / 2, p1.y())
+                    path.cubicTo(ctrl1, ctrl2, p1)
 
-            pen = QPen(QColor(hex_color), 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-            painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(path)
+                pen = QPen(QColor(hex_color), 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+                painter.setPen(pen)
+                painter.setBrush(Qt.NoBrush)
+                painter.drawPath(path)
 
-            # Draw points (draw selectively if many points to avoid crowding)
+            # Draw Point Dots
             dot_brush = QBrush(QColor(hex_color))
             white_pen = QPen(QColor("#FFFFFF"), 2)
             painter.setPen(white_pen)
             painter.setBrush(dot_brush)
-            
+
             total_pts = len(points)
             for idx, pt in enumerate(points):
-                # If total points > 15, show key markers (every 4-5 days and end points)
                 if total_pts > 15:
                     if idx == 0 or idx == total_pts - 1 or idx % 5 == 4:
                         painter.drawEllipse(pt, 3.5, 3.5)
@@ -104,7 +108,7 @@ class ChartCanvas(QWidget):
         draw_series(self.pengeluaran, AppColors.PENGELUARAN)
         draw_series(self.pemasukan, AppColors.PEMASUKAN)
 
-        # X-Axis Labels Rendering
+        # X-Axis Labels
         if self.labels:
             total_lbls = len(self.labels)
             step_x = plot_w / (total_lbls - 1) if total_lbls > 1 else plot_w
@@ -112,14 +116,12 @@ class ChartCanvas(QWidget):
             painter.setFont(QFont("Segoe UI", 9))
 
             if total_lbls > 12:
-                # For 30 days (Bulan ini), show clean distributed date markers (e.g. 1 Sep, 5 Sep, 10 Sep, 15 Sep, 20 Sep, 25 Sep, 30 Sep)
                 for idx in range(total_lbls):
                     if idx == 0 or idx == total_lbls - 1 or idx % 5 == 4:
                         lbl = self.labels[idx]
                         px = left_pad + idx * step_x
                         painter.drawText(int(px - 35), int(h - bottom_pad + 6), 70, 20, Qt.AlignCenter, lbl)
             else:
-                # For 7 days (Minggu ini) or 12 months (Tahun ini), show all labels
                 for idx, lbl in enumerate(self.labels):
                     px = left_pad + idx * step_x
                     painter.drawText(int(px - 35), int(h - bottom_pad + 6), 70, 20, Qt.AlignCenter, lbl)

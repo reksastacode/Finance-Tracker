@@ -1,22 +1,25 @@
 """
 Calendar Transaction Component.
 Displays monthly calendar grid with transaction tag chips per day.
-Implements event listeners for month changes and fixed layout constraints.
+Implements event listeners for month changes based on system date.
 """
+from datetime import date
 import calendar
 from PySide6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QWidget
 )
 from PySide6.QtCore import Qt, Signal
 from src.core.constants import AppColors
+from src.core.utils import BULAN
 
 class CalendarWidget(QFrame):
     month_changed = Signal(int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.year = 2026
-        self.month = 9  # September
+        today = date.today()
+        self.year = today.year
+        self.month = today.month
         self.events = {}
         self._setup_ui()
 
@@ -52,14 +55,11 @@ class CalendarWidget(QFrame):
         header_layout.addWidget(title)
         header_layout.addStretch()
 
-        # Month Selector (Width enlarged so text is never truncated)
+        # Month Selector (Populated dynamically with current year's months)
         self.month_combo = QComboBox()
-        self.month_combo.addItems([
-            "Januari 2026", "Februari 2026", "Maret 2026", "April 2026",
-            "Mei 2026", "Juni 2026", "Juli 2026", "Agustus 2026",
-            "September 2026", "Oktober 2026", "November 2026", "Desember 2026"
-        ])
-        self.month_combo.setCurrentText("September 2026")
+        month_items = [f"{m} {self.year}" for m in BULAN]
+        self.month_combo.addItems(month_items)
+        self.month_combo.setCurrentIndex(max(0, self.month - 1))
         self.month_combo.setFixedWidth(165)
         self.month_combo.setFixedHeight(32)
         self.month_combo.currentIndexChanged.connect(self._on_month_combo_changed)
@@ -108,8 +108,8 @@ class CalendarWidget(QFrame):
         self._rebuild_grid()
 
     def update_calendar_data(self, data: dict):
-        self.year = data.get("year", 2026)
-        self.month = data.get("month", 9)
+        self.year = data.get("year", date.today().year)
+        self.month = data.get("month", date.today().month)
         self.events = data.get("events", {})
         self._rebuild_grid()
 

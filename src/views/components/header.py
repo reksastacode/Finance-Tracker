@@ -1,10 +1,12 @@
 """
 Header Component.
-Displays page titles, subtitles, and fixed-height formatted date badge.
+Displays page titles, subtitles, and real-time formatted date badge based on user system clock.
 """
+from datetime import date
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame, QSizePolicy
 from PySide6.QtCore import Qt
 from src.core.constants import AppColors
+from src.core.utils import format_indonesian_date
 
 class HeaderWidget(QWidget):
     def __init__(self, title: str, subtitle: str, parent=None):
@@ -35,7 +37,7 @@ class HeaderWidget(QWidget):
 
         layout.addStretch()
 
-        # Right: Fixed-size Date Badge with Calendar Icon
+        # Right: Fixed-size Date Badge with Calendar Icon showing real computer date
         date_badge = QFrame()
         date_badge.setFixedHeight(36)
         date_badge.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -57,7 +59,8 @@ class HeaderWidget(QWidget):
         cal_icon = QLabel("📅")
         cal_icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
 
-        self.date_text = QLabel("Senin, 3 September 2026")
+        # Use current system date
+        self.date_text = QLabel(format_indonesian_date(date.today()))
         self.date_text.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
 
         date_layout.addWidget(cal_icon)
@@ -68,3 +71,7 @@ class HeaderWidget(QWidget):
     def set_title(self, title: str, subtitle: str):
         self.title_label.setText(title)
         self.subtitle_label.setText(subtitle)
+
+    def refresh_date(self):
+        """Update date badge with current computer date."""
+        self.date_text.setText(format_indonesian_date(date.today()))
