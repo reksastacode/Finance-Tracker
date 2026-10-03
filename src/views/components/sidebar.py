@@ -10,9 +10,9 @@ class SidebarButton(QPushButton):
     def __init__(self, svg_icon_path: str, text: str, page_idx: int, parent=None):
         super().__init__(parent)
         self.page_idx = page_idx
+        self.svg_icon_path = svg_icon_path
         self.setText(f"   {text}")
         if svg_icon_path:
-            self.setIcon(get_svg_icon(svg_icon_path, 22, 22))
             self.setIconSize(QSize(22, 22))
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -20,6 +20,10 @@ class SidebarButton(QPushButton):
         self._update_style(False)
 
     def _update_style(self, is_active: bool):
+        if self.svg_icon_path:
+            # Green icon when selected, white when not
+            icon_color = "#587352" if is_active else "#FFFFFF"
+            self.setIcon(get_svg_icon(self.svg_icon_path, 22, 22, color=icon_color))
         if is_active:
             self.setStyleSheet("""
                 QPushButton {

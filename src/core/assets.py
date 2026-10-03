@@ -4,8 +4,8 @@ Loads and caches SVG icons as QIcon, QPixmap, or QSvgWidget across all UI views.
 """
 import os
 import re
-from PySide6.QtCore import Qt, QSize, QRectF
-from PySide6.QtGui import QIcon, QPixmap, QPainter
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QLabel
 
@@ -154,13 +154,16 @@ def _get_icon_bounds(svg_path: str) -> QRectF | None:
     return result
 
 
-def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24) -> QPixmap:
+def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24, color: str | None = None) -> QPixmap:
     """
     Renders and caches an SVG path to a crisp QPixmap of specified dimensions.
     Automatically crops large-canvas SVGs (e.g. Figma exports at 1366x768)
     to render only the icon content area.
+
+    If `color` is given (e.g. "#FFFFFF"), the icon is recolored to that solid
+    color (works for single-color icons, tinting all opaque pixels).
     """
-    cache_key = (svg_path, width, height)
+    cache_key = (svg_path, width, height, color)
     if cache_key in _PIXMAP_CACHE:
         return _PIXMAP_CACHE[cache_key]
 
@@ -194,13 +197,26 @@ def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24) -> QPixmap:
 
     painter.end()
 
+    if color:
+        tinted = QPixmap(pix.size())
+        tinted.fill(Qt.transparent)
+        tint_painter = QPainter(tinted)
+        tint_painter.setRenderHint(QPainter.Antialiasing)
+        tint_painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        tint_painter.drawPixmap(0, 0, pix)
+        # SourceIn: keep alpha, replace color — recolors monochrome icons
+        tint_painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        tint_painter.fillRect(tinted.rect(), QColor(color))
+        tint_painter.end()
+        pix = tinted
+
     _PIXMAP_CACHE[cache_key] = pix
     return pix
 
 
-def get_svg_icon(svg_path: str, width: int = 24, height: int = 24) -> QIcon:
-    """Returns a QIcon created from an SVG file."""
-    pix = get_svg_pixmap(svg_path, width, height)
+def get_svg_icon(svg_path: str, width: int = 24, height: int = 24, color: str | None = None) -> QIcon:
+    """Returns a QIcon created from an SVG file, optionally recolored."""
+    pix = get_svg_pixmap(svg_path, width, height, color)
     return QIcon(pix)
 
 
