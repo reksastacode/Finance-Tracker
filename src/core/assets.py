@@ -4,8 +4,8 @@ Loads and caches SVG icons as QIcon, QPixmap, or QSvgWidget across all UI views.
 """
 import os
 import re
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QImage
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QLabel
 
@@ -61,107 +61,110 @@ class AppIcons:
     TARGET_AKTIVITAS = os.path.join(ASSETS_DIR, "5. TARGET KEUANGAN", "Aktivitas Terbaru Icon (Target Keuangan Menu).svg")
 
 
-_PIXMAP_CACHE = {}
-_BOUNDS_CACHE = {}
+# =========================================================================
+# GRAPHIC OBJECT & RESOURCE MANAGEMENT
+# =========================================================================
+# 1. _ICON_CACHE: Reuses QIcon instances across identical requests (O(1) memory)
+# 2. _RENDERER_CACHE: Reuses parsed QSvgRenderer DOM trees to avoid disk I/O
+# 3. _PIXMAP_CACHE & QPixmapCache: Native LRU graphic buffer management
+# =========================================================================
 
-# These SVG files from Figma/Inkscape export have a large canvas (1024x576)
-# with the icon element positioned away from the origin. We detect the icon
-# bounding box from the first <clipPath> rect/path so we can crop precisely.
-_TRANSFORM_RE = re.compile(
-    r'transform="matrix\(1,\s*0,\s*0,\s*1,\s*([\d.]+),\s*([\d.]+)\)"'
-)
-_RECT_CLIP_RE = re.compile(
-    r'<clipPath[^>]*>\s*<rect[^/]*width="(\d+)"[^/]*height="(\d+)"',
-    re.DOTALL
-)
-_RECT_CLIP_RE2 = re.compile(
-    r'<clipPath[^>]*>\s*<rect[^/]*height="(\d+)"[^/]*width="(\d+)"',
-    re.DOTALL
-)
-_SIMPLE_RECT_RE = re.compile(
-    r'M\s+([\d.]+)\s+([\d.]+)\s+L\s+([\d.]+)\s+([\d.]+)\s+L\s+([\d.]+)\s+([\d.]+)\s+L\s+([\d.]+)\s+([\d.]+)'
-)
+from PySide6.QtGui import QPixmapCache
+
+# Configure Qt native graphics cache limit to 32 MB (in KB)
+QPixmapCache.setCacheLimit(32768)
+
+_PIXMAP_CACHE: dict[tuple, QPixmap] = {}
+_ICON_CACHE: dict[tuple, QIcon] = {}
+_RENDERER_CACHE: dict[str, QSvgRenderer] = {}
+# Cropped icon content (alpha-trimmed) at probe resolution, per SVG file
+_CONTENT_CACHE: dict[str, QImage | None] = {}
 
 
-def _get_icon_bounds(svg_path: str) -> QRectF | None:
+# A pixel counts as opaque when its alpha exceeds this threshold (0-255)
+_ALPHA_THRESHOLD = 10
+_NONZERO_RE = re.compile(rb'[^\x00-' + bytes([_ALPHA_THRESHOLD]) + rb']')
+
+# Probe render height (px): large enough that scaling down to any UI size stays crisp
+_PROBE_MIN_DIM = 600
+
+
+def _get_content_image(renderer: QSvgRenderer, svg_path: str) -> QImage | None:
     """
-    Detects the actual icon bounding box for Figma-exported SVGs.
-    These SVGs have a large canvas (1024x576) with the icon positioned via a
-    group transform. We extract the transform offset (tx, ty) and the largest
-    clipPath <rect> size to compute the global icon bounds: (tx, ty, w, h).
-    Returns None if the SVG appears to already fit within a normal viewBox.
+    Returns the icon's content as an alpha-trimmed QImage at probe resolution.
+
+    The Figma-exported SVGs sit on a huge canvas (1024x576) and QSvgRenderer's
+    bounds-based rendering is unreliable with them (some files paint garbage).
+    So instead we render the full canvas once — which always works — measure
+    the opaque-pixel bounding box, and crop to it. Cropped result is cached
+    per file; all UI sizes are produced by scaling this crop (aspect kept).
     """
-    if svg_path in _BOUNDS_CACHE:
-        return _BOUNDS_CACHE[svg_path]
+    if svg_path in _CONTENT_CACHE:
+        return _CONTENT_CACHE[svg_path]
 
     result = None
-    try:
-        with open(svg_path, encoding="utf-8") as f:
-            content = f.read()
+    vb = renderer.viewBoxF()
+    if vb.isValid() and vb.width() > 0 and vb.height() > 0:
+        probe_h = _PROBE_MIN_DIM
+        probe_w = max(1, round(_PROBE_MIN_DIM * vb.width() / vb.height()))
 
-        # Check if viewBox is small — no crop needed
-        vb_m = re.search(r'viewBox="([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"', content)
-        if vb_m:
-            vx, vy, vw, vh = (float(v) for v in vb_m.groups())
-            if vw <= 600 and vh <= 600:
-                _BOUNDS_CACHE[svg_path] = None
-                return None
+        probe = QPixmap(probe_w, probe_h)
+        probe.fill(Qt.transparent)
+        p = QPainter(probe)
+        p.setRenderHint(QPainter.Antialiasing)
+        renderer.render(p)
+        p.end()
 
-        # Strategy 1: Find first group-level transform (the icon offset) + largest rect clipPath
-        # The Figma pattern is: <g transform="matrix(1, 0, 0, 1, tx, ty)"> ... icon at local (0,0)
-        tm = _TRANSFORM_RE.search(content)
-        if tm:
-            tx, ty = float(tm.group(1)), float(tm.group(2))
-            # Now find the largest <rect> clipPath to get icon dimensions
-            best_w, best_h = 0, 0
-            for rm in _RECT_CLIP_RE.finditer(content):
-                w, h = int(rm.group(1)), int(rm.group(2))
-                if w * h > best_w * best_h:
-                    best_w, best_h = w, h
-            for rm in _RECT_CLIP_RE2.finditer(content):
-                w, h = int(rm.group(2)), int(rm.group(1))
-                if w * h > best_w * best_h:
-                    best_w, best_h = w, h
+        img = probe.toImage()
+        alpha = img.convertToFormat(QImage.Format_Alpha8)
+        stride = alpha.bytesPerLine()
+        data = bytes(alpha.constBits())
+        w, h = alpha.width(), alpha.height()
 
-            if best_w > 100 and best_h > 100:
-                result = QRectF(tx, ty, best_w, best_h)
-                _BOUNDS_CACHE[svg_path] = result
-                return result
+        min_y, max_y, min_x, max_x = -1, -1, w, -1
+        for y in range(h):
+            row = data[y * stride: y * stride + w]
+            m = _NONZERO_RE.search(row)
+            if m is not None:
+                if min_y < 0:
+                    min_y = y
+                max_y = y
+                if m.start() < min_x:
+                    min_x = m.start()
+                mr = _NONZERO_RE.search(row[::-1])
+                if mr is not None and (w - 1 - mr.start()) > max_x:
+                    max_x = w - 1 - mr.start()
 
-        # Strategy 2: Find the largest rect-shaped path in clipPaths (global coords)
-        # Pattern: M x y L x2 y L x2 y2 L x y2
-        best_bounds = None
-        best_area = 0.0
-        for m in _SIMPLE_RECT_RE.finditer(content[:6000]):
-            pts = [float(v) for v in m.groups()]
-            xs = [pts[0], pts[2], pts[4], pts[6]]
-            ys = [pts[1], pts[3], pts[5], pts[7]]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            w = max_x - min_x
-            h = max_y - min_y
-            area = w * h
-            if w > 200 and h > 200 and area > best_area:
-                best_area = area
-                best_bounds = QRectF(min_x, min_y, w, h)
+        if min_y >= 0 and max_x >= min_x:
+            # Small margin so antialiased edges are not clipped
+            pad = 2
+            min_x = max(0, min_x - pad)
+            min_y = max(0, min_y - pad)
+            max_x = min(w - 1, max_x + pad)
+            max_y = min(h - 1, max_y + pad)
+            result = img.copy(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
-        result = best_bounds
-
-    except Exception:
-        pass
-
-    _BOUNDS_CACHE[svg_path] = result
+    _CONTENT_CACHE[svg_path] = result
     return result
+
+
+def get_cached_svg_renderer(svg_path: str) -> QSvgRenderer | None:
+    """Retrieves or creates a shared QSvgRenderer instance (avoids redundant XML re-parsing)."""
+    if not os.path.exists(svg_path):
+        return None
+    if svg_path not in _RENDERER_CACHE:
+        renderer = QSvgRenderer(svg_path)
+        if renderer.isValid():
+            _RENDERER_CACHE[svg_path] = renderer
+        else:
+            return None
+    return _RENDERER_CACHE[svg_path]
 
 
 def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24, color: str | None = None) -> QPixmap:
     """
     Renders and caches an SVG path to a crisp QPixmap of specified dimensions.
-    Automatically crops large-canvas SVGs (e.g. Figma exports at 1366x768)
-    to render only the icon content area.
-
-    If `color` is given (e.g. "#FFFFFF"), the icon is recolored to that solid
-    color (works for single-color icons, tinting all opaque pixels).
+    Uses managed Graphic Cache to prevent memory leaks.
     """
     cache_key = (svg_path, width, height, color)
     if cache_key in _PIXMAP_CACHE:
@@ -174,28 +177,31 @@ def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24, color: str 
 
     pix = QPixmap(width, height)
     pix.fill(Qt.transparent)
-    painter = QPainter(pix)
-    painter.setRenderHint(QPainter.Antialiasing)
-    painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-    renderer = QSvgRenderer(svg_path)
-    if renderer.isValid():
-        bounds = _get_icon_bounds(svg_path)
-        if bounds is not None:
-            # Render only the icon region (crop from big canvas)
-            # We compute the scale and offset needed to map bounds -> (0,0,w,h)
-            vb = renderer.viewBoxF()
-            # Scale factor from SVG coordinates to pixmap pixels
-            scale_x = width / bounds.width()
-            scale_y = height / bounds.height()
-            # Translate so icon top-left goes to (0,0) then scale to target size
-            painter.translate(-bounds.x() * scale_x, -bounds.y() * scale_y)
-            painter.scale(scale_x, scale_y)
-            renderer.render(painter, vb)
+    renderer = get_cached_svg_renderer(svg_path)
+    if renderer is not None and renderer.isValid():
+        content = _get_content_image(renderer, svg_path)
+        if content is not None and not content.isNull():
+            # Scale the cropped content to fit the target, PRESERVING the
+            # aspect ratio, centered — icons are never stretched.
+            scaled = QPixmap.fromImage(content.scaled(
+                width, height,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            ))
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            painter.drawPixmap(
+                (width - scaled.width()) // 2,
+                (height - scaled.height()) // 2,
+                scaled,
+            )
+            painter.end()
         else:
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.Antialiasing)
             renderer.render(painter)
-
-    painter.end()
+            painter.end()
 
     if color:
         tinted = QPixmap(pix.size())
@@ -204,7 +210,6 @@ def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24, color: str 
         tint_painter.setRenderHint(QPainter.Antialiasing)
         tint_painter.setRenderHint(QPainter.SmoothPixmapTransform)
         tint_painter.drawPixmap(0, 0, pix)
-        # SourceIn: keep alpha, replace color — recolors monochrome icons
         tint_painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
         tint_painter.fillRect(tinted.rect(), QColor(color))
         tint_painter.end()
@@ -215,9 +220,18 @@ def get_svg_pixmap(svg_path: str, width: int = 24, height: int = 24, color: str 
 
 
 def get_svg_icon(svg_path: str, width: int = 24, height: int = 24, color: str | None = None) -> QIcon:
-    """Returns a QIcon created from an SVG file, optionally recolored."""
+    """
+    Returns a shared QIcon created from an SVG file.
+    Caches QIcon instances to avoid redundant GPU/RAM allocations.
+    """
+    cache_key = (svg_path, width, height, color)
+    if cache_key in _ICON_CACHE:
+        return _ICON_CACHE[cache_key]
+
     pix = get_svg_pixmap(svg_path, width, height, color)
-    return QIcon(pix)
+    icon = QIcon(pix)
+    _ICON_CACHE[cache_key] = icon
+    return icon
 
 
 def create_svg_label(svg_path: str, width: int = 24, height: int = 24, parent=None) -> QLabel:
@@ -230,3 +244,16 @@ def create_svg_label(svg_path: str, width: int = 24, height: int = 24, parent=No
     lbl.setPixmap(pix)
     lbl.setScaledContents(True)
     return lbl
+
+
+def clear_graphic_resource_cache():
+    """
+    Explicitly frees all cached graphic objects, pixmaps, icons, and SVG renderers.
+    Useful during memory optimization or session resets.
+    """
+    _PIXMAP_CACHE.clear()
+    _ICON_CACHE.clear()
+    _RENDERER_CACHE.clear()
+    _CONTENT_CACHE.clear()
+    QPixmapCache.clear()
+
