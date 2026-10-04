@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit
 )
 from PySide6.QtCore import Qt, QDate, Slot, QSize
-from src.core.constants import AppColors, TransactionType
-from src.core.assets import AppIcons, get_svg_icon
+from src.core.constants import AppColors
+from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.history_viewmodel import HistoryViewModel
 from src.views.components.header import HeaderWidget
 from src.views.components.summary_card import SummaryCardWidget
@@ -81,7 +81,12 @@ class HistoryView(QWidget):
         # Filter 3: Tanggal Mulai
         c3 = QVBoxLayout()
         c3.setSpacing(2)
-        c3.addWidget(QLabel("Tanggal Mulai", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        tgl_mulai_hdr = QHBoxLayout()
+        tgl_mulai_hdr.setSpacing(4)
+        tgl_mulai_hdr.addWidget(create_svg_label(AppIcons.HIST_TANGGAL, 13, 13))
+        tgl_mulai_hdr.addWidget(QLabel("Tanggal Mulai", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        tgl_mulai_hdr.addStretch()
+        c3.addLayout(tgl_mulai_hdr)
         today_dt = QDate.currentDate()
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setCalendarPopup(True)
@@ -94,7 +99,12 @@ class HistoryView(QWidget):
         # Filter 4: Tanggal Akhir
         c4 = QVBoxLayout()
         c4.setSpacing(2)
-        c4.addWidget(QLabel("Tanggal Akhir", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        tgl_akhir_hdr = QHBoxLayout()
+        tgl_akhir_hdr.setSpacing(4)
+        tgl_akhir_hdr.addWidget(create_svg_label(AppIcons.HIST_TANGGAL, 13, 13))
+        tgl_akhir_hdr.addWidget(QLabel("Tanggal Akhir", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        tgl_akhir_hdr.addStretch()
+        c4.addLayout(tgl_akhir_hdr)
         self.end_date_edit = QDateEdit()
         self.end_date_edit.setCalendarPopup(True)
         self.end_date_edit.setDate(today_dt)
@@ -155,9 +165,84 @@ class HistoryView(QWidget):
 
         main_layout.addWidget(self.table)
 
+        # 5. Pagination & Memory-Efficient Windowing Bar
+        self.pagination_bar = QFrame()
+        self.pagination_bar.setStyleSheet(f"""
+            QFrame {{
+                background-color: {AppColors.CARD_BG};
+                border: 1px solid {AppColors.BORDER_CARD};
+                border-radius: 10px;
+            }}
+            QLabel {{
+                background: transparent;
+                border: none;
+            }}
+        """)
+        p_layout = QHBoxLayout(self.pagination_bar)
+        p_layout.setContentsMargins(14, 8, 14, 8)
+        p_layout.setSpacing(10)
+
+        # Info Label (e.g. "Menampilkan 1 - 50 dari 500 transaksi")
+        self.page_info_lbl = QLabel("Menampilkan 0 - 0 dari 0 transaksi")
+        self.page_info_lbl.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600;")
+        p_layout.addWidget(self.page_info_lbl)
+        p_layout.addStretch()
+
+        # Nav Buttons
+        def make_page_btn(text):
+            btn = QPushButton(text)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedHeight(28)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #FAF8F5;
+                    border: 1px solid #CBD5E0;
+                    border-radius: 6px;
+                    color: {AppColors.TEXT_PRIMARY};
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 0 10px;
+                }}
+                QPushButton:hover {{
+                    background-color: {AppColors.PRIMARY_BUTTON};
+                    color: #FFFFFF;
+                    border-color: {AppColors.PRIMARY_BUTTON};
+                }}
+                QPushButton:disabled {{
+                    background-color: #F7FAFC;
+                    color: #A0AEC0;
+                    border-color: #E2E8F0;
+                }}
+            """)
+            return btn
+
+        self.btn_first_page = make_page_btn("|<")
+        self.btn_first_page.clicked.connect(lambda: self.vm.set_page(1))
+
+        self.btn_prev_page = make_page_btn("< Prev")
+        self.btn_prev_page.clicked.connect(self.vm.prev_page)
+
+        self.page_badge_lbl = QLabel("Halaman 1 / 1")
+        self.page_badge_lbl.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; padding: 0 8px;")
+
+        self.btn_next_page = make_page_btn("Next >")
+        self.btn_next_page.clicked.connect(self.vm.next_page)
+
+        self.btn_last_page = make_page_btn(">|")
+        self.btn_last_page.clicked.connect(lambda: self.vm.set_page(999999))
+
+        p_layout.addWidget(self.btn_first_page)
+        p_layout.addWidget(self.btn_prev_page)
+        p_layout.addWidget(self.page_badge_lbl)
+        p_layout.addWidget(self.btn_next_page)
+        p_layout.addWidget(self.btn_last_page)
+
+        main_layout.addWidget(self.pagination_bar)
+
     def _bind_viewmodel(self):
         self.vm.history_summary_updated.connect(self._on_summary_updated)
         self.vm.transactions_updated.connect(self._on_transactions_updated)
+        self.vm.pagination_updated.connect(self._on_pagination_updated)
         self.vm.categories_for_filter_updated.connect(self._on_categories_filter_updated)
 
     def showEvent(self, event):
@@ -186,8 +271,42 @@ class HistoryView(QWidget):
         self.card_saldo_bersih.update_value(summary.get("saldo_bersih", "Rp 0"))
         self.card_total_tx.update_value(f"{summary.get('jumlah_transaksi', '0')} Transaksi")
 
+    @Slot(dict)
+    def _on_pagination_updated(self, info: dict):
+        curr = info.get("current_page", 1)
+        total_p = info.get("total_pages", 1)
+        total_r = info.get("total_records", 0)
+        s_idx = info.get("start_index", 0)
+        e_idx = info.get("end_index", 0)
+
+        self.page_info_lbl.setText(f"Menampilkan {s_idx} - {e_idx} dari {total_r} transaksi")
+        self.page_badge_lbl.setText(f"Halaman {curr} / {total_p}")
+
+        self.btn_first_page.setEnabled(curr > 1)
+        self.btn_prev_page.setEnabled(info.get("has_prev", False))
+        self.btn_next_page.setEnabled(info.get("has_next", False))
+        self.btn_last_page.setEnabled(curr < total_p)
+
+    def _clear_table_memory(self):
+        """Menghapus eksplisit widget sel tabel dan membebaskan resource Qt-nya.
+        
+        Widget PySide6 (QWidget, QPushButton, dll.) menyimpan resource native Qt
+        (handle window, alokasi memori grafis) yang tidak selalu langsung dibebaskan
+        oleh garbage collector Python. Memanggil removeCellWidget() + deleteLater()
+        memastikan resource dibebaskan segera sebelum baris baru dirender.
+        """
+        for r in range(self.table.rowCount()):
+            w = self.table.cellWidget(r, 6)
+            if w is not None:
+                self.table.removeCellWidget(r, 6)
+                w.deleteLater()
+        self.table.clearContents()
+
     @Slot(list)
     def _on_transactions_updated(self, transactions: list):
+        # 1. Deterministic memory cleanup of previous row widgets
+        self._clear_table_memory()
+
         if not transactions:
             self.table.setRowCount(1)
             empty_item = QTableWidgetItem("Tidak ada catatan transaksi yang sesuai dengan filter.")
@@ -199,6 +318,8 @@ class HistoryView(QWidget):
 
         self.table.clearSpans()
         self.table.setRowCount(len(transactions))
+        del_icon = get_svg_icon(AppIcons.CAT_DELETE, 14, 14)
+
         for row, tx in enumerate(transactions):
             # Tanggal
             t_item = QTableWidgetItem(tx["date"])
@@ -229,9 +350,9 @@ class HistoryView(QWidget):
             s_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.table.setItem(row, 5, s_item)
 
-            # Aksi: Delete Button
+            # Aksi: Delete Button (Reuses shared QIcon instance)
             del_btn = QPushButton()
-            del_btn.setIcon(get_svg_icon(AppIcons.CAT_DELETE, 14, 14))
+            del_btn.setIcon(del_icon)
             del_btn.setIconSize(QSize(14, 14))
             del_btn.setFixedSize(26, 24)
             del_btn.setCursor(Qt.PointingHandCursor)

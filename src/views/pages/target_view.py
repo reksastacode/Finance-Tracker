@@ -64,7 +64,12 @@ class TargetFormDialog(QDialog):
         box_layout.addWidget(self.name_input)
 
         # Nominal
-        box_layout.addWidget(QLabel("Target Nominal", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        nom_hdr = QHBoxLayout()
+        nom_hdr.setSpacing(4)
+        nom_hdr.addWidget(create_svg_label(AppIcons.TARGET_NOMINAL, 14, 14))
+        nom_hdr.addWidget(QLabel("Target Nominal", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        nom_hdr.addStretch()
+        box_layout.addLayout(nom_hdr)
         self.nom_input = QLineEdit()
         self.nom_input.setPlaceholderText("Masukkan jumlah target yang ingin dicapai")
         self.nom_input.textChanged.connect(self._on_amount_changed)
