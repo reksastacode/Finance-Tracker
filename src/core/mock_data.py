@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List
 import uuid
+import random
 
 from src.core.constants import TransactionType, TargetPriority
 
@@ -88,19 +89,7 @@ class InMemoryDataStore:
             TargetModel("t6", "Beli Penthouse", 15_000_000_000, 100_000_000, "01/01/2026", "01 Jan 2040", TargetPriority.TINGGI, "Tempat tinggal mewah masa depan"),
         ]
 
-        self.transactions: List[TransactionModel] = [
-            TransactionModel("tx1", TransactionType.PEMASUKAN, "Gaji", 9_000_000, "01/08/2026", "Gaji bulan Agustus"),
-            TransactionModel("tx2", TransactionType.PEMASUKAN, "Uang saku", 5_000_000, "04/08/2026", "Uang saku dari orang tua"),
-            TransactionModel("tx3", TransactionType.PENGELUARAN, "Makan", 79_000, "06/08/2026", "Makan malam"),
-            TransactionModel("tx4", TransactionType.TARGET, "Beli Lambo", 2_390_000, "14/08/2026", "GASS POLLL, ASSIAPP"),
-            TransactionModel("tx5", TransactionType.PENGELUARAN, "Hiburan", 80_000, "26/08/2026", "Nonton bioskop"),
-            TransactionModel("tx6", TransactionType.TARGET, "Beli PC", 300_000, "30/08/2026", "Beli PC impian"),
-            TransactionModel("tx7", TransactionType.PEMASUKAN, "Gaji", 7_000_000, "01/09/2026", "Gaji bulan September"),
-            TransactionModel("tx8", TransactionType.PENGELUARAN, "Belanja", 400_000, "02/09/2026", "Belanja bulanan"),
-            TransactionModel("tx9", TransactionType.TARGET, "Liburan di Eropa", 2_000_000, "01/09/2026", "Tabungan liburan"),
-            TransactionModel("tx10", TransactionType.PENGELUARAN, "Makan", 200_000, "09/09/2026", "Makan"),
-            TransactionModel("tx11", TransactionType.PEMASUKAN, "Gaji", 5_000_000, "15/09/2026", "Gaji Bulanan"),
-        ]
+        self.transactions: List[TransactionModel] = self._generate_mock_transactions(target_count=2000)
 
         self.target_allocations: List[TargetAllocationModel] = [
             TargetAllocationModel("ta1", "t1", "Beli PC", 3_000_000, "05/09/2026", "Target Beli PC"),
@@ -115,6 +104,81 @@ class InMemoryDataStore:
 
         # Initial available starting balance
         self.base_balance = 12_000_000
+
+    def _generate_mock_transactions(self, target_count: int = 2000) -> List[TransactionModel]:
+        """Generates realistic mock transactions preserving the original 11 records."""
+        initial_txs: List[TransactionModel] = [
+            TransactionModel("tx1", TransactionType.PEMASUKAN, "Gaji", 9_000_000, "01/08/2026", "Gaji bulan Agustus"),
+            TransactionModel("tx2", TransactionType.PEMASUKAN, "Uang saku", 5_000_000, "04/08/2026", "Uang saku dari orang tua"),
+            TransactionModel("tx3", TransactionType.PENGELUARAN, "Makan", 79_000, "06/08/2026", "Makan malam"),
+            TransactionModel("tx4", TransactionType.TARGET, "Beli Lambo", 2_390_000, "14/08/2026", "GASS POLLL, ASSIAPP"),
+            TransactionModel("tx5", TransactionType.PENGELUARAN, "Hiburan", 80_000, "26/08/2026", "Nonton bioskop"),
+            TransactionModel("tx6", TransactionType.TARGET, "Beli PC", 300_000, "30/08/2026", "Beli PC impian"),
+            TransactionModel("tx7", TransactionType.PEMASUKAN, "Gaji", 7_000_000, "01/09/2026", "Gaji bulan September"),
+            TransactionModel("tx8", TransactionType.PENGELUARAN, "Belanja", 400_000, "02/09/2026", "Belanja bulanan"),
+            TransactionModel("tx9", TransactionType.TARGET, "Liburan di Eropa", 2_000_000, "01/09/2026", "Tabungan liburan"),
+            TransactionModel("tx10", TransactionType.PENGELUARAN, "Makan", 200_000, "09/09/2026", "Makan"),
+            TransactionModel("tx11", TransactionType.PEMASUKAN, "Gaji", 5_000_000, "15/09/2026", "Gaji Bulanan"),
+        ]
+
+        txs = list(initial_txs)
+        needed = target_count - len(txs)
+        if needed <= 0:
+            return txs[:target_count]
+
+        rng = random.Random(2026)  # Deterministic seed for reproducible testing
+
+        pengeluaran_catalog = [
+            ("Makan", 20_000, 85_000, ["Makan siang di kantor", "Sarapan bubur ayam", "Makan malam penyet", "Kopi & snack sore", "Makan bersama di warung", "Makan malam soto mie"]),
+            ("Transportasi", 15_000, 50_000, ["Bensin motor harian", "Ongkos ojek online", "Tarif parkir & tol", "Top up kartu transportasi", "Bensin mobil mingguan"]),
+            ("Belanja", 60_000, 350_000, ["Belanja kebutuhan pokok", "Beli sabun & detergen", "Belanja sayur & buah di pasar", "Kebutuhan harian rumah tangga", "Belanja di supermarket"]),
+            ("Hiburan", 40_000, 150_000, ["Tiket nonton bioskop", "Langganan streaming film", "Beli kopi di coffee shop", "Voucher game favorit", "Buku novel akhir pekan"]),
+            ("Kesehatan", 30_000, 200_000, ["Beli vitamin & suplemen", "Obat flu di apotek", "Koyo & minyak angin", "Pemeriksaan kesehatan di klinik", "Pembersih luka & perban"]),
+            ("Pendidikan", 80_000, 450_000, ["Beli buku kuliah", "Langganan platform belajar", "Alat tulis & fotokopi modul", "Kursus online bersertifikat"]),
+            ("Liburan", 120_000, 500_000, ["Tiket rekreasi akhir pekan", "Jajan di tempat wisata", "Sewa perlengkapan liburan", "Tiket museum"]),
+            ("Transfer", 100_000, 500_000, ["Transfer bantuan adik", "Transfer uang jajan keluarga", "Patungan acara kantor", "Iuran lingkungan bulanan"]),
+        ]
+
+        pemasukan_catalog = [
+            ("Gaji", 5_000_000, 12_000_000, ["Gaji pokok bulanan", "Honor project freelance", "Pemasukan kerja sampingan", "Fee konsultasi visual"]),
+            ("Bonus Gaji", 1_000_000, 4_000_000, ["Bonus performa bulanan", "Uang lembur proyek", "Insentif pencapaian target", "Bonus apresiasi tim"]),
+            ("Uang saku", 500_000, 1_500_000, ["Uang saku dari orang tua", "Kiriman keluarga", "Bantuan operasional bulanan"]),
+            ("Transfer masuk", 250_000, 1_200_000, ["Transfer pelunasan patungan", "Hasil penjualan preloved", "Uang ganti reimburse"]),
+        ]
+
+        target_catalog = [
+            ("Beli PC", 200_000, 800_000, "Tabungan berkala untuk Beli PC"),
+            ("Beli Lambo", 500_000, 1_500_000, "Alokasi target Beli Lambo"),
+            ("Beli Emas", 300_000, 1_000_000, "Nabung beli emas batangan"),
+            ("Liburan di Eropa", 250_000, 800_000, "Tabungan persiapan liburan di Eropa"),
+            ("Beli Ducati", 400_000, 1_200_000, "Tabungan impian Beli Ducati"),
+            ("Beli Penthouse", 500_000, 2_000_000, "Tabungan properti Penthouse masa depan"),
+        ]
+
+        months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"]
+
+        for idx in range(len(txs) + 1, target_count + 1):
+            roll = rng.random()
+            m = rng.choice(months)
+            d = rng.randint(1, 28)
+            date_str = f"{d:02d}/{m}/2026"
+
+            if roll < 0.65:  # 65% Pengeluaran
+                cat, min_a, max_a, notes_list = rng.choice(pengeluaran_catalog)
+                amt = rng.randint(min_a // 1000, max_a // 1000) * 1000
+                note = rng.choice(notes_list)
+                txs.append(TransactionModel(f"tx{idx}", TransactionType.PENGELUARAN, cat, amt, date_str, note))
+            elif roll < 0.90:  # 25% Pemasukan
+                cat, min_a, max_a, notes_list = rng.choice(pemasukan_catalog)
+                amt = rng.randint(min_a // 10000, max_a // 10000) * 10000
+                note = rng.choice(notes_list)
+                txs.append(TransactionModel(f"tx{idx}", TransactionType.PEMASUKAN, cat, amt, date_str, note))
+            else:  # 10% Target
+                cat, min_a, max_a, note = rng.choice(target_catalog)
+                amt = rng.randint(min_a // 10000, max_a // 10000) * 10000
+                txs.append(TransactionModel(f"tx{idx}", TransactionType.TARGET, cat, amt, date_str, note))
+
+        return txs
 
     def get_total_pemasukan(self) -> int:
         return sum(tx.amount for tx in self.transactions if tx.type == TransactionType.PEMASUKAN)
