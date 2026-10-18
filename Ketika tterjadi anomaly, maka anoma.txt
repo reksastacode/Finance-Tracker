@@ -1,2 +1,0 @@
-Ketika tterjadi anomaly, maka anomaly bisa dikendalikan
-
