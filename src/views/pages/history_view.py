@@ -5,14 +5,16 @@ and interactive data table with running balances and deletion actions.
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit
+    QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit,
+    QFileDialog
 )
 from PySide6.QtCore import Qt, QDate, Slot, QSize
-from src.core.constants import AppColors
+from src.core.constants import AppColors, TransactionType
 from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.history_viewmodel import HistoryViewModel
 from src.views.components.header import HeaderWidget
 from src.views.components.summary_card import SummaryCardWidget
+
 
 class HistoryView(QWidget):
     def __init__(self, viewmodel: HistoryViewModel, parent=None):
@@ -113,7 +115,15 @@ class HistoryView(QWidget):
         c4.addWidget(self.end_date_edit)
         f_layout.addLayout(c4, 1)
 
-        # Filter Button
+        # Action Buttons (Filter & Ekspor CSV)
+        btn_box = QVBoxLayout()
+        btn_box.setSpacing(2)
+        btn_box.addWidget(QLabel(" "))
+
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(8)
+
+        # 1. Filter Button
         self.filter_btn = QPushButton("  FILTER")
         self.filter_btn.setIcon(get_svg_icon(AppIcons.HIST_FILTER, 16, 16))
         self.filter_btn.setIconSize(QSize(16, 16))
@@ -126,20 +136,48 @@ class HistoryView(QWidget):
                 font-size: 12px;
                 font-weight: 700;
                 border-radius: 8px;
-                padding: 0 18px;
+                padding: 0 16px;
                 border: none;
             }}
             QPushButton:hover {{
                 background-color: {AppColors.PRIMARY_BUTTON_HOVER};
             }}
+            QPushButton:disabled {{
+                background-color: #CBD5E0;
+                color: #718096;
+            }}
         """)
         self.filter_btn.clicked.connect(self._on_filter_clicked)
+        actions_row.addWidget(self.filter_btn)
 
-        # Add stretch above filter btn for alignment
-        btn_box = QVBoxLayout()
-        btn_box.setSpacing(2)
-        btn_box.addWidget(QLabel(" "))
-        btn_box.addWidget(self.filter_btn)
+        # 2. Ekspor CSV Button (Real-world User Feature)
+        self.export_btn = QPushButton("Ekspor CSV")
+        self.export_btn.setCursor(Qt.PointingHandCursor)
+        self.export_btn.setFixedHeight(34)
+        self.export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FAF8F5;
+                color: #4A5568;
+                border: 1px solid #CBD5E0;
+                font-size: 11px;
+                font-weight: 700;
+                border-radius: 8px;
+                padding: 0 14px;
+            }
+            QPushButton:hover {
+                background-color: #EDF2F7;
+                color: #2D3748;
+                border-color: #A0AEC0;
+            }
+            QPushButton:disabled {
+                background-color: #F7FAFC;
+                color: #A0AEC0;
+            }
+        """)
+        self.export_btn.clicked.connect(self._on_export_csv_clicked)
+        actions_row.addWidget(self.export_btn)
+
+        btn_box.addLayout(actions_row)
         f_layout.addLayout(btn_box)
 
         main_layout.addWidget(filter_card)
@@ -182,7 +220,7 @@ class HistoryView(QWidget):
         p_layout.setContentsMargins(14, 8, 14, 8)
         p_layout.setSpacing(10)
 
-        # Info Label (e.g. "Menampilkan 1 - 50 dari 500 transaksi")
+        # Info Label
         self.page_info_lbl = QLabel("Menampilkan 0 - 0 dari 0 transaksi")
         self.page_info_lbl.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600;")
         p_layout.addWidget(self.page_info_lbl)
@@ -244,6 +282,7 @@ class HistoryView(QWidget):
         self.vm.transactions_updated.connect(self._on_transactions_updated)
         self.vm.pagination_updated.connect(self._on_pagination_updated)
         self.vm.categories_for_filter_updated.connect(self._on_categories_filter_updated)
+        self.vm.busy_state_changed.connect(self._on_busy_state_changed)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -255,6 +294,23 @@ class HistoryView(QWidget):
         s_date = self.start_date_edit.date().toString("dd/MM/yyyy")
         e_date = self.end_date_edit.date().toString("dd/MM/yyyy")
         self.vm.apply_filter(tx_type, cat, s_date, e_date)
+
+    def _on_export_csv_clicked(self):
+        """Asynchronously exports filtered transactions to a CSV file."""
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Ekspor Riwayat Transaksi",
+            "riwayat_transaksi.csv",
+            "CSV Files (*.csv)"
+        )
+        if path:
+            self.vm.export_transactions_async(path)
+
+    @Slot(bool)
+    def _on_busy_state_changed(self, is_busy: bool):
+        """Disables action buttons while background worker is calculating."""
+        self.filter_btn.setEnabled(not is_busy)
+        self.export_btn.setEnabled(not is_busy)
 
     @Slot(list)
     def _on_categories_filter_updated(self, cat_names: list):
