@@ -2,6 +2,7 @@
 Dashboard ViewModel.
 Manages summary calculations, chart series data, calendar aggregates,
 and recent activity feeds through PySide6 Signals and Slots based on current system date.
+All metrics are reactively computed from actual persistent database records.
 """
 from datetime import date, timedelta
 import calendar
@@ -9,6 +10,20 @@ from PySide6.QtCore import Signal, Slot
 from src.viewmodels.base_viewmodel import BaseViewModel
 from src.core.mock_data import mock_store, TransactionType
 from src.core.utils import format_rupiah, BULAN_SINGKAT, BULAN
+
+
+def _parse_tx_date(d_str: str):
+    """Safely parse DD/MM/YYYY transaction date string into datetime.date object."""
+    if not d_str:
+        return None
+    try:
+        parts = d_str.split("/")
+        if len(parts) == 3:
+            return date(int(parts[2]), int(parts[1]), int(parts[0]))
+    except Exception:
+        pass
+    return None
+
 
 class DashboardViewModel(BaseViewModel):
     # Signals to notify View
@@ -37,7 +52,7 @@ class DashboardViewModel(BaseViewModel):
         saldo = mock_store.get_current_balance()
         pemasukan = mock_store.get_total_pemasukan()
         pengeluaran = mock_store.get_total_pengeluaran()
-        total_target = sum(t.collected_amount for t in mock_store.targets[:3]) or 5_000_000
+        total_target = sum(t.collected_amount for t in mock_store.targets)
 
         data = {
             "saldo_saat_ini": format_rupiah(saldo),
@@ -52,59 +67,89 @@ class DashboardViewModel(BaseViewModel):
         self.summary_updated.emit(data)
 
     def _update_chart(self):
-        """Generates chart series dynamically up to the current computer date."""
+        """Generates chart series dynamically from actual transaction records."""
         today = date.today()
         current_day = today.day
         current_month = today.month
         current_year = today.year
         month_abbr = BULAN_SINGKAT[current_month - 1]
 
+        # Pre-group transactions by date
+        tx_by_date = {}
+        for tx in mock_store.transactions:
+            d = _parse_tx_date(tx.date)
+            if d:
+                if d not in tx_by_date:
+                    tx_by_date[d] = {"p": 0, "k": 0, "t": 0}
+                if tx.type == TransactionType.PEMASUKAN:
+                    tx_by_date[d]["p"] += tx.amount
+                elif tx.type == TransactionType.PENGELUARAN:
+                    tx_by_date[d]["k"] += tx.amount
+                elif tx.type == TransactionType.TARGET:
+                    tx_by_date[d]["t"] += tx.amount
+
         if self._current_chart_period == "Minggu ini":
-            # Current calendar week (Monday to Sunday)
             start_of_week = today - timedelta(days=today.weekday())
             labels = []
             for i in range(7):
                 d = start_of_week + timedelta(days=i)
                 labels.append(f"{d.day} {BULAN_SINGKAT[d.month - 1]}")
 
-            # Days elapsed in current week (Monday=1 .. Sunday=7)
             cutoff = today.weekday() + 1
+            pemasukan_series = []
+            pengeluaran_series = []
+            target_series = []
 
-            seed_p = [1.2, 0.8, 1.5, 0.4, 1.8, 0.9, 2.2]
-            seed_k = [0.5, 0.7, 0.3, 0.8, 1.2, 0.6, 1.0]
-            seed_t = [0.6, 0.9, 1.3, 1.7, 2.1, 2.5, 2.8]
-
-            pemasukan_series = seed_p[:cutoff]
-            pengeluaran_series = seed_k[:cutoff]
-            target_series = seed_t[:cutoff]
-            max_val = 3.5
+            for i in range(cutoff):
+                d = start_of_week + timedelta(days=i)
+                entry = tx_by_date.get(d, {"p": 0, "k": 0, "t": 0})
+                pemasukan_series.append(round(entry["p"] / 1_000_000, 2))
+                pengeluaran_series.append(round(entry["k"] / 1_000_000, 2))
+                target_series.append(round(entry["t"] / 1_000_000, 2))
 
         elif self._current_chart_period == "Bulan ini":
-            # Days in the current month (e.g. 30 or 31 days)
             num_days = calendar.monthrange(current_year, current_month)[1]
             labels = [f"{d} {month_abbr}" for d in range(1, num_days + 1)]
             cutoff = max(1, min(current_day, num_days))
 
-            seed_p = [1.0, 0.2, 0.5, 1.2, 0.3, 0.0, 1.5, 0.8, 0.4, 2.0, 0.5, 0.2, 0.8, 1.0, 3.5, 0.6, 0.2, 0.4, 1.2, 0.8, 1.5, 0.3, 0.6, 2.2, 0.7, 1.0, 0.4, 1.8, 0.5, 2.5, 1.2]
-            seed_k = [0.4, 0.6, 0.3, 0.8, 0.2, 0.5, 0.9, 0.4, 0.7, 1.5, 0.3, 0.8, 0.5, 0.6, 1.8, 0.4, 0.7, 0.3, 0.9, 1.2, 0.6, 0.4, 0.8, 1.4, 0.5, 0.8, 0.3, 1.1, 0.7, 1.6, 0.9]
+            pemasukan_series = []
+            pengeluaran_series = []
+            target_series = []
 
-            pemasukan_series = [seed_p[i % len(seed_p)] for i in range(cutoff)]
-            pengeluaran_series = [seed_k[i % len(seed_k)] for i in range(cutoff)]
-            target_series = [round(0.2 + (i * 0.15), 2) for i in range(cutoff)]
-            max_val = 5.0
+            for d_num in range(1, cutoff + 1):
+                d = date(current_year, current_month, d_num)
+                entry = tx_by_date.get(d, {"p": 0, "k": 0, "t": 0})
+                pemasukan_series.append(round(entry["p"] / 1_000_000, 2))
+                pengeluaran_series.append(round(entry["k"] / 1_000_000, 2))
+                target_series.append(round(entry["t"] / 1_000_000, 2))
 
         else: # Tahun ini
             labels = list(BULAN_SINGKAT)
             cutoff = max(1, min(current_month, 12))
 
-            seed_p = [5.0, 6.2, 7.0, 6.5, 8.0, 9.0, 8.5, 10.0, 11.5, 10.0, 12.0, 14.0]
-            seed_k = [3.0, 3.8, 4.5, 4.0, 5.2, 6.0, 5.5, 6.8, 7.0, 6.5, 7.8, 8.5]
-            seed_t = [1.5, 2.8, 4.0, 5.5, 7.0, 8.5, 9.8, 11.2, 12.5, 13.8, 15.0, 16.5]
+            monthly_data = {m: {"p": 0, "k": 0, "t": 0} for m in range(1, 13)}
+            for d, entry in tx_by_date.items():
+                if d.year == current_year:
+                    monthly_data[d.month]["p"] += entry["p"]
+                    monthly_data[d.month]["k"] += entry["k"]
+                    monthly_data[d.month]["t"] += entry["t"]
 
-            pemasukan_series = seed_p[:cutoff]
-            pengeluaran_series = seed_k[:cutoff]
-            target_series = seed_t[:cutoff]
-            max_val = 18.0
+            pemasukan_series = [round(monthly_data[m]["p"] / 1_000_000, 2) for m in range(1, cutoff + 1)]
+            pengeluaran_series = [round(monthly_data[m]["k"] / 1_000_000, 2) for m in range(1, cutoff + 1)]
+            target_series = [round(monthly_data[m]["t"] / 1_000_000, 2) for m in range(1, cutoff + 1)]
+
+        all_vals = pemasukan_series + pengeluaran_series + target_series
+        max_val = max(all_vals) if all_vals else 0.0
+        if max_val <= 0:
+            max_val = 1.0
+        elif max_val < 3.0:
+            max_val = 3.0
+        elif max_val < 6.0:
+            max_val = 6.0
+        elif max_val < 12.0:
+            max_val = 12.0
+        else:
+            max_val = round(max_val * 1.2, 1)
 
         payload = {
             "period": self._current_chart_period,
@@ -117,22 +162,52 @@ class DashboardViewModel(BaseViewModel):
         self.chart_data_updated.emit(payload)
 
     def _update_calendar(self):
-        """Calendar daily aggregate tags based on active month."""
+        """Calendar daily aggregate tags based on active month and real transactions."""
         month_name = f"{BULAN[self._calendar_month - 1]} {self._calendar_year}"
-        
-        day_events = {
-            1: [{"type": "Pengeluaran", "label": "-Rp80k", "color": "#C98787"}],
-            4: [{"type": "Target", "label": "$Rp790k", "color": "#A99ABF"}],
-            5: [{"type": "Pemasukan", "label": "+Rp100k", "color": "#7FAE8A"}],
-            9: [{"type": "Pengeluaran", "label": "-Rp50k", "color": "#C98787"}],
-            13: [{"type": "Pengeluaran", "label": "-Rp59k", "color": "#C98787"}],
-            16: [{"type": "Target", "label": "$Rp890k", "color": "#A99ABF"}],
-            19: [{"type": "Target", "label": "$Rp200k", "color": "#A99ABF"}],
-            22: [{"type": "Pengeluaran", "label": "-Rp69k", "color": "#C98787"}],
-            24: [{"type": "Pemasukan", "label": "+Rp140k", "color": "#7FAE8A"}],
-            25: [{"type": "Pengeluaran", "label": "-Rp69k", "color": "#C98787"}],
-            28: [{"type": "Pemasukan", "label": "+Rp10k", "color": "#7FAE8A"}],
-        }
+
+        day_totals = {}
+        for tx in mock_store.transactions:
+            d = _parse_tx_date(tx.date)
+            if d and d.year == self._calendar_year and d.month == self._calendar_month:
+                day = d.day
+                if day not in day_totals:
+                    day_totals[day] = {"Pemasukan": 0, "Pengeluaran": 0, "Target": 0}
+                if tx.type in day_totals[day]:
+                    day_totals[day][tx.type] += tx.amount
+
+        def format_chip(amount: int, prefix: str) -> str:
+            if amount >= 1_000_000:
+                val = amount / 1_000_000
+                return f"{prefix}Rp{int(val) if val.is_integer() else f'{val:.1f}'}jt"
+            elif amount >= 1_000:
+                return f"{prefix}Rp{amount // 1000}k"
+            else:
+                return f"{prefix}Rp{amount}"
+
+        day_events = {}
+        for day, totals in day_totals.items():
+            events = []
+            if totals["Pengeluaran"] > 0:
+                events.append({
+                    "type": "Pengeluaran",
+                    "label": format_chip(totals["Pengeluaran"], "-"),
+                    "color": "#C98787"
+                })
+            if totals["Target"] > 0:
+                events.append({
+                    "type": "Target",
+                    "label": format_chip(totals["Target"], "$"),
+                    "color": "#A99ABF"
+                })
+            if totals["Pemasukan"] > 0:
+                events.append({
+                    "type": "Pemasukan",
+                    "label": format_chip(totals["Pemasukan"], "+"),
+                    "color": "#7FAE8A"
+                })
+            if events:
+                day_events[day] = events
+
         self.calendar_data_updated.emit({
             "year": self._calendar_year,
             "month": self._calendar_month,

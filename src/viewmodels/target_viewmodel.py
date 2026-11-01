@@ -70,7 +70,9 @@ class TargetViewModel(BaseViewModel):
                 "priority": t.priority,
                 "badge_bg": badge_bg,
                 "badge_fg": badge_fg,
-                "notes": t.notes
+                "notes": t.notes,
+                "created_at": getattr(t, "created_at", "") or "-",
+                "updated_at": getattr(t, "updated_at", "") or "-"
             })
         self.targets_updated.emit(result)
 
@@ -83,7 +85,8 @@ class TargetViewModel(BaseViewModel):
                 "target_name": a.target_name,
                 "nominal_formatted": format_rupiah(a.amount),
                 "date": a.date,
-                "notes": a.notes
+                "notes": a.notes,
+                "created_at": getattr(a, "created_at", "") or "-"
             })
         self.target_allocations_updated.emit(allocs)
 

@@ -46,10 +46,10 @@ class DashboardView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_saldo = SummaryCardWidget("Saldo Saat Ini", "Rp 12.000.000", svg_icon=AppIcons.DASHBOARD_SALDO)
-        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp 1.000.000", svg_icon=AppIcons.DASHBOARD_PEMASUKAN)
-        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp 800.000", svg_icon=AppIcons.DASHBOARD_PENGELUARAN)
-        self.card_target = SummaryCardWidget("Total Target", "Rp 5.000.000", svg_icon=AppIcons.DASHBOARD_TOTAL_TARGET)
+        self.card_saldo = SummaryCardWidget("Saldo Saat Ini", "Rp 0", svg_icon=AppIcons.DASHBOARD_SALDO)
+        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp 0", svg_icon=AppIcons.DASHBOARD_PEMASUKAN)
+        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp 0", svg_icon=AppIcons.DASHBOARD_PENGELUARAN)
+        self.card_target = SummaryCardWidget("Total Target", "Rp 0", svg_icon=AppIcons.DASHBOARD_TOTAL_TARGET)
 
         summary_row.addWidget(self.card_saldo)
         summary_row.addWidget(self.card_pemasukan)

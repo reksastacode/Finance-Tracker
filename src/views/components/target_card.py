@@ -20,6 +20,9 @@ class TargetCardWidget(QFrame):
         self.setProperty("class", "card")
         self.setMinimumWidth(210)
         self.setFixedHeight(180)
+        c_at = self.target_data.get("created_at", "-")
+        u_at = self.target_data.get("updated_at", "-")
+        self.setToolTip(f"ID Target: {self.target_data.get('id', '')}\nDibuat: {c_at}\nDiperbarui: {u_at}")
         self.setStyleSheet(f"""
             TargetCardWidget {{
                 background-color: {AppColors.CARD_BG};

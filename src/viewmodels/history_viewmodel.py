@@ -123,6 +123,7 @@ class HistoryViewModel(BaseViewModel):
             page_size=self._page_size,
             current_page=self._current_page,
             simulate_workload=True,
+            base_balance=mock_store.base_balance,
             parent=self
         )
 

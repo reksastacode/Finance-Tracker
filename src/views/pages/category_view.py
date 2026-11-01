@@ -124,6 +124,9 @@ class CategoryCard(QFrame):
     def _setup_ui(self):
         self.setProperty("class", "card")
         self.setFixedHeight(140)
+        c_at = self.cat_data.get("created_at", "-")
+        u_at = self.cat_data.get("updated_at", "-")
+        self.setToolTip(f"ID Kategori: {self.cat_data.get('id', '')}\nDibuat: {c_at}\nDiperbarui: {u_at}")
         self.setStyleSheet(f"""
             CategoryCard {{
                 background-color: {AppColors.CARD_BG};

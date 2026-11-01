@@ -72,6 +72,7 @@ class FilterTransactionsWorker(QThread):
         page_size: int = 50,
         current_page: int = 1,
         simulate_workload: bool = False,
+        base_balance: int = 0,
         parent=None
     ):
         super().__init__(parent)
@@ -83,6 +84,7 @@ class FilterTransactionsWorker(QThread):
         self.page_size = max(10, page_size)
         self.current_page = current_page
         self.simulate_workload = simulate_workload
+        self.base_balance = base_balance
         self._is_cancelled = False
 
     def cancel(self):
@@ -101,7 +103,7 @@ class FilterTransactionsWorker(QThread):
                 return
 
             # 1. Calculate running balance chronologically (oldest to newest)
-            running_balance = 10_000_000
+            running_balance = self.base_balance
             tx_items_with_balance = []
 
             step_interval = max(1, total_raw // 5)
@@ -131,7 +133,9 @@ class FilterTransactionsWorker(QThread):
                     "nominal": tx.amount,
                     "nominal_formatted": nominal_str,
                     "saldo_setelah": format_rupiah(running_balance),
-                    "color": color
+                    "color": color,
+                    "created_at": getattr(tx, "created_at", "") or "",
+                    "updated_at": getattr(tx, "updated_at", "") or ""
                 })
 
                 if (idx + 1) % step_interval == 0:

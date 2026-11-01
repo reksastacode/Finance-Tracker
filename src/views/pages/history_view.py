@@ -406,6 +406,13 @@ class HistoryView(QWidget):
             s_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.table.setItem(row, 5, s_item)
 
+            # Audit Trail Tooltip (SQLite Persistence Metadata)
+            created_str = tx.get("created_at") or "-"
+            updated_str = tx.get("updated_at") or "-"
+            audit_tooltip = f"ID Transaksi: {tx.get('id', '')}\nDibuat: {created_str}\nDiperbarui: {updated_str}"
+            for item in (t_item, j_item, k_item, d_item, n_item, s_item):
+                item.setToolTip(audit_tooltip)
+
             # Aksi: Delete Button (Reuses shared QIcon instance)
             del_btn = QPushButton()
             del_btn.setIcon(del_icon)

@@ -32,7 +32,9 @@ class CategoryViewModel(BaseViewModel):
                 "id": cat.id,
                 "name": cat.name,
                 "type": cat.type,
-                "description": cat.description
+                "description": cat.description,
+                "created_at": getattr(cat, "created_at", "") or "-",
+                "updated_at": getattr(cat, "updated_at", "") or "-"
             }
             for cat in mock_store.categories
             if cat.type == self._current_tab

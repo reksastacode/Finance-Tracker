@@ -7,3 +7,7 @@ README.md
 \icon_debug
 \tools
 \notes
+**/__pycache__/**
+*.pyc
+\data 
+
