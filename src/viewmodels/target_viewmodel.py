@@ -25,26 +25,43 @@ class TargetViewModel(BaseViewModel):
         self._load_targets()
         self._load_allocations()
 
+    @staticmethod
+    def _collected_by_target() -> dict:
+        """
+        Returns the amount collected per target derived from allocations.
+
+        ``targets.collected_amount`` is kept for backward compatibility, but it
+        can drift when allocations are imported or edited.  Allocations are the
+        single source of truth.
+        """
+        totals: dict[str, int] = {}
+        for allocation in mock_store.target_allocations:
+            totals[allocation.target_id] = totals.get(allocation.target_id, 0) + int(allocation.amount or 0)
+        return totals
+
     def _load_summary(self):
+        collected_by_target = self._collected_by_target()
         active_count = len(mock_store.targets)
-        total_target_amount = sum(t.target_amount for t in mock_store.targets)
-        terkumpul = sum(t.collected_amount for t in mock_store.targets)
+        total_target_amount = sum(int(t.target_amount or 0) for t in mock_store.targets)
+        terkumpul = sum(collected_by_target.get(t.id, 0) for t in mock_store.targets)
         progress_pct = int((terkumpul / total_target_amount) * 100) if total_target_amount > 0 else 0
 
         summary = {
             "total_target_aktif": str(active_count),
-            "total_target_keuangan": format_rupiah(total_target_amount or 18_111_000),
-            "terkumpul": format_rupiah(terkumpul or 5_100_000),
-            "seluruh_progress": f"{min(progress_pct or 20, 100)}%"
+            "total_target_keuangan": format_rupiah(total_target_amount),
+            "terkumpul": format_rupiah(terkumpul),
+            "seluruh_progress": f"{min(max(progress_pct, 0), 100)}%"
         }
         self.target_summary_updated.emit(summary)
 
     def _load_targets(self):
         result = []
+        collected_by_target = self._collected_by_target()
         for t in mock_store.targets:
-            pct = int((t.collected_amount / t.target_amount) * 100) if t.target_amount > 0 else 0
-            sisa = max(0, t.target_amount - t.collected_amount)
-            
+            collected = collected_by_target.get(t.id, 0)
+            pct = int((collected / t.target_amount) * 100) if t.target_amount > 0 else 0
+            sisa = max(0, int(t.target_amount or 0) - collected)
+
             # Badge colors
             if t.priority == TargetPriority.TINGGI:
                 badge_bg = "#FFEBEE"
@@ -61,10 +78,10 @@ class TargetViewModel(BaseViewModel):
                 "name": t.name,
                 "target_amount": t.target_amount,
                 "target_amount_formatted": format_rupiah(t.target_amount),
-                "collected_amount": t.collected_amount,
-                "collected_amount_formatted": format_rupiah(t.collected_amount),
+                "collected_amount": collected,
+                "collected_amount_formatted": format_rupiah(collected),
                 "sisa_formatted": format_rupiah(sisa),
-                "progress_pct": min(pct, 100),
+                "progress_pct": min(max(pct, 0), 100),
                 "deadline_date": t.deadline_date,
                 "start_date": t.start_date,
                 "priority": t.priority,

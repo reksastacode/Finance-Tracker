@@ -33,6 +33,7 @@ class InMemoryDataStore:
     def _init_store(self):
         """Initializes database connection and synchronizes caches."""
         self.db = DatabaseManager.instance()
+        self._attachments = {}
         self._load_base_balance()
         self.reload()
 
@@ -51,6 +52,7 @@ class InMemoryDataStore:
         self._targets: List[TargetModel] = self.db.get_all_targets()
         self._transactions: List[TransactionModel] = self.db.get_all_transactions()
         self._target_allocations: List[TargetAllocationModel] = self.db.get_all_target_allocations()
+        self._attachments = self.db.get_attachments_map()
 
     def reload_from_database(self):
         """Alias for reload()."""
@@ -83,8 +85,16 @@ class InMemoryDataStore:
     @transactions.setter
     def transactions(self, value: List[TransactionModel]):
         self._transactions = list(value)
-        # Update SQLite if batch replaced
+        # Update SQLite if batch replaced.  Old attachment files would become
+        # orphans because their transaction rows are cascaded away.
         self.db.bulk_replace_transactions(self._transactions)
+        self._attachments = {}
+        try:
+            from src.storage.attachments import get_attachment_service
+
+            get_attachment_service().clear_all()
+        except Exception:
+            pass
 
     @property
     def target_allocations(self) -> List[TargetAllocationModel]:
@@ -94,22 +104,67 @@ class InMemoryDataStore:
     def target_allocations(self, value: List[TargetAllocationModel]):
         self._target_allocations = list(value)
 
+    @property
+    def attachments(self) -> dict:
+        return dict(self._attachments)
+
     # =========================================================================
     # TRANSACTION CRUD (Table & Form Input Component)
     # =========================================================================
 
-    def add_transaction(self, tx_type: str, category: str, amount: int, tx_date: str, notes: str) -> TransactionModel:
+    def add_transaction(
+        self,
+        tx_type: str,
+        category: str,
+        amount: int,
+        tx_date: str,
+        notes: str,
+        attachment_path: str = "",
+    ) -> TransactionModel:
         """CREATE: Inserts a new transaction into SQLite and in-memory cache."""
         new_tx = self.db.add_transaction(tx_type, category, amount, tx_date, notes)
+        if attachment_path:
+            try:
+                from src.storage.attachments import get_attachment_service
+
+                metadata = get_attachment_service().store(attachment_path)
+                attachment = self.db.add_attachment(
+                    transaction_id=new_tx.id,
+                    stored_name=metadata["stored_name"],
+                    original_name=metadata["original_name"],
+                    mime_type=metadata["mime_type"],
+                    size_bytes=metadata["size_bytes"],
+                    sha256=metadata["sha256"],
+                )
+                self._attachments[new_tx.id] = attachment
+            except Exception:
+                # Do not leave a transaction without its requested receipt.
+                self.db.delete_transaction(new_tx.id)
+                raise
         self._transactions.insert(0, new_tx)
         return new_tx
 
     def delete_transaction(self, tx_id: str) -> bool:
         """DELETE: Deletes transaction from SQLite and updates cache."""
+        attachment = self._attachments.get(tx_id) or self.db.get_attachment_for_transaction(tx_id)
         success = self.db.delete_transaction(tx_id)
         if success:
             self._transactions = [tx for tx in self._transactions if tx.id != tx_id]
+            self._attachments.pop(tx_id, None)
+            if attachment:
+                try:
+                    from src.storage.attachments import get_attachment_service
+
+                    get_attachment_service().delete_file(attachment.stored_name)
+                except Exception:
+                    pass
         return success
+
+    def get_attachment_for_transaction(self, tx_id: str):
+        attachment = self._attachments.get(tx_id)
+        if attachment is not None:
+            return attachment
+        return self.db.get_attachment_for_transaction(tx_id)
 
     def get_total_pemasukan(self) -> int:
         """READ: Total income from SQLite."""
@@ -207,6 +262,12 @@ class InMemoryDataStore:
     def reset_database(self, keep_categories: bool = True):
         """Resets SQLite database and refreshes all internal in-memory caches."""
         self.db.reset_database(keep_categories=keep_categories)
+        try:
+            from src.storage.attachments import get_attachment_service
+
+            get_attachment_service().clear_all()
+        except Exception:
+            pass
         self._load_base_balance()
         self.reload_from_database()
 

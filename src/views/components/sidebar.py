@@ -62,6 +62,7 @@ class SidebarButton(QPushButton):
 
 class SidebarWidget(QWidget):
     page_changed = Signal(int)
+    settings_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -87,10 +88,15 @@ class SidebarWidget(QWidget):
 
         # 1. Top Branding Box (Dark Green Rounded Rectangle with Logo)
         brand_box = QFrame()
+        brand_box.setObjectName("sidebarBrandBox")
         brand_box.setStyleSheet("""
-            QFrame {
+            QFrame#sidebarBrandBox {
                 background-color: #728D6E;
                 border-radius: 14px;
+                border: none;
+            }
+            QFrame#sidebarBrandBox QLabel {
+                background: transparent;
                 border: none;
             }
         """)
@@ -136,6 +142,30 @@ class SidebarWidget(QWidget):
             self.buttons.append(btn)
 
         layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+        # 3. Settings (opens the local-storage / encryption dialog)
+        self.settings_btn = QPushButton("   Pengaturan")
+        self.settings_btn.setIcon(get_svg_icon(AppIcons.UTIL_SETTINGS, 21, 21, "#FFFFFF"))
+        self.settings_btn.setIconSize(QSize(21, 21))
+        self.settings_btn.setCursor(Qt.PointingHandCursor)
+        self.settings_btn.setFixedHeight(48)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 12px;
+                text-align: left;
+                padding-left: 18px;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.18);
+            }
+        """)
+        self.settings_btn.clicked.connect(self.settings_requested.emit)
+        layout.addWidget(self.settings_btn)
 
         # Initial selection
         self.select_page(0)

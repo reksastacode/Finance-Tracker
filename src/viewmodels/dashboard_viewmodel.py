@@ -36,9 +36,27 @@ class DashboardViewModel(BaseViewModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_chart_period = "Minggu ini"
+        try:
+            from src.storage.config import get_config
+
+            self._current_chart_period = get_config().get("ui.chart_period", "Minggu ini")
+        except Exception:
+            pass
         today = date.today()
         self._calendar_year = today.year
         self._calendar_month = today.month
+
+    def _cache(self):
+        try:
+            from src.storage.config import get_config
+
+            if not get_config().get("cache.enabled", True):
+                return None
+            from src.storage.cache import get_cache
+
+            return get_cache()
+        except Exception:
+            return None
 
     def refresh(self):
         """Refreshes all dashboard metrics and emits change signals."""
@@ -49,10 +67,17 @@ class DashboardViewModel(BaseViewModel):
         self._update_targets_preview()
 
     def _update_summary(self):
+        cache = self._cache()
+        cached = cache.get("dashboard:summary") if cache else None
+        if cached is not None:
+            self.summary_updated.emit(cached)
+            return
+
         saldo = mock_store.get_current_balance()
         pemasukan = mock_store.get_total_pemasukan()
         pengeluaran = mock_store.get_total_pengeluaran()
-        total_target = sum(t.collected_amount for t in mock_store.targets)
+        # Derived from target allocations, never from the denormalized column.
+        total_target = mock_store.get_total_target_terkumpul()
 
         data = {
             "saldo_saat_ini": format_rupiah(saldo),
@@ -64,10 +89,19 @@ class DashboardViewModel(BaseViewModel):
             "raw_pengeluaran": pengeluaran,
             "raw_target": total_target,
         }
+        if cache:
+            cache.set("dashboard:summary", data)
         self.summary_updated.emit(data)
 
     def _update_chart(self):
         """Generates chart series dynamically from actual transaction records."""
+        cache = self._cache()
+        cache_key = f"dashboard:chart:{self._current_chart_period}"
+        cached = cache.get(cache_key) if cache else None
+        if cached is not None:
+            self.chart_data_updated.emit(cached)
+            return
+
         today = date.today()
         current_day = today.day
         current_month = today.month
@@ -159,6 +193,8 @@ class DashboardViewModel(BaseViewModel):
             "target": target_series,
             "max_val": max_val
         }
+        if cache:
+            cache.set(cache_key, payload)
         self.chart_data_updated.emit(payload)
 
     def _update_calendar(self):
@@ -240,15 +276,22 @@ class DashboardViewModel(BaseViewModel):
         self.recent_transactions_updated.emit(recent)
 
     def _update_targets_preview(self):
+        collected_by_target: dict[str, int] = {}
+        for allocation in mock_store.target_allocations:
+            collected_by_target[allocation.target_id] = (
+                collected_by_target.get(allocation.target_id, 0) + int(allocation.amount or 0)
+            )
+
         preview = []
         for t in mock_store.targets[:4]:
-            percent = int((t.collected_amount / t.target_amount) * 100) if t.target_amount > 0 else 0
+            collected = collected_by_target.get(t.id, 0)
+            percent = int((collected / t.target_amount) * 100) if t.target_amount > 0 else 0
             preview.append({
                 "id": t.id,
                 "name": t.name,
-                "collected_formatted": format_rupiah(t.collected_amount),
+                "collected_formatted": format_rupiah(collected),
                 "target_formatted": format_rupiah(t.target_amount),
-                "progress_percent": min(percent, 100),
+                "progress_percent": min(max(percent, 0), 100),
                 "priority": t.priority,
             })
         self.targets_preview_updated.emit(preview)
@@ -257,6 +300,12 @@ class DashboardViewModel(BaseViewModel):
     def set_chart_period(self, period: str):
         """Slot to handle chart period dropdown changes."""
         self._current_chart_period = period
+        try:
+            from src.storage.config import get_config
+
+            get_config().set("ui.chart_period", period)
+        except Exception:
+            pass
         self._update_chart()
 
     @Slot(int, int)

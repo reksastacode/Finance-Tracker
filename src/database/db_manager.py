@@ -14,18 +14,20 @@ from datetime import datetime
 
 from src.core.constants import TransactionType, TargetPriority
 from src.database.models import (
+    AttachmentModel,
     CategoryModel,
     TargetModel,
     TransactionModel,
     TargetAllocationModel,
     _current_timestamp_str
 )
+from src.storage.crypto import CryptoError, get_crypto
+from src.storage.paths import StoragePaths
 
 # Resolve default SQLite database path in project root / data
-_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(_CURRENT_DIR))
-DEFAULT_DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
-DEFAULT_DB_PATH = os.path.join(DEFAULT_DATA_DIR, "keuangan_mandiri.db")
+_STORAGE_PATHS = StoragePaths()
+DEFAULT_DATA_DIR = str(_STORAGE_PATHS.base_dir)
+DEFAULT_DB_PATH = str(_STORAGE_PATHS.db_path)
 
 
 class DatabaseManager:
@@ -39,6 +41,8 @@ class DatabaseManager:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
         self._thread_local = threading.local()
+        self._crypto = get_crypto()
+        self.encryption_enabled = self._read_encryption_enabled()
 
         # Ensure database directory exists
         if db_path != ":memory:":
@@ -47,6 +51,7 @@ class DatabaseManager:
         # Initialize schema, migrations, and seed data
         self._init_schema()
         self._seed_initial_data_if_empty()
+        self._migrate_encryption()
 
     @classmethod
     def instance(cls, db_path: str = DEFAULT_DB_PATH) -> "DatabaseManager":
@@ -154,6 +159,27 @@ class DatabaseManager:
             );
         """)
 
+        # 6. Transaction Attachments (local file storage metadata)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attachments (
+                id TEXT PRIMARY KEY,
+                transaction_id TEXT NOT NULL,
+                stored_name TEXT NOT NULL,
+                original_name_enc TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                sha256 TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (transaction_id)
+                    REFERENCES transactions(id) ON DELETE CASCADE
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_attach_tx ON attachments(transaction_id);")
+
+        # Cache invalidation version.  The row must exist before data triggers
+        # can increment it.
+        cursor.execute("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('data_version', '0');")
+
         # --- Automatic Schema Migrations (Ensure created_at and updated_at exist) ---
         self._ensure_column(cursor, "categories", "created_at", "TIMESTAMP")
         self._ensure_column(cursor, "categories", "updated_at", "TIMESTAMP")
@@ -191,6 +217,20 @@ class DatabaseManager:
             END;
         """)
 
+        # --- Monotonic data version used by the persistent cache ---
+        for table_name in ("categories", "targets", "transactions", "target_allocations", "attachments"):
+            for event_name in ("INSERT", "UPDATE", "DELETE"):
+                cursor.execute(f"""
+                    CREATE TRIGGER IF NOT EXISTS trg_{table_name}_{event_name.lower()}_version
+                    AFTER {event_name} ON {table_name}
+                    FOR EACH ROW
+                    BEGIN
+                        UPDATE app_settings
+                        SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+                        WHERE key = 'data_version';
+                    END;
+                """)
+
         # --- Performance & Timestamp Indexes ---
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tx_type ON transactions(type);")
@@ -211,6 +251,161 @@ class DatabaseManager:
         if column_name not in columns:
             cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {col_def};")
             cursor.execute(f"UPDATE {table_name} SET {column_name} = CURRENT_TIMESTAMP WHERE {column_name} IS NULL;")
+
+    # =========================================================================
+    # LOCAL STORAGE / ENCRYPTION
+    # =========================================================================
+
+    def _read_encryption_enabled(self) -> bool:
+        """Reads the user's encryption preference from config.json."""
+        try:
+            from src.storage.config import get_config
+
+            return bool(get_config().get("encryption.enabled", True))
+        except Exception:
+            return True
+
+    def _crypt(self, value: str | None) -> str:
+        """Encrypts a value for storage, respecting the current toggle."""
+        if value is None or value == "":
+            return value or ""
+        if self.encryption_enabled:
+            return self._crypto.encrypt_text(value)
+        # When encryption is turned off, make sure old encrypted values do not
+        # remain in newly written rows.
+        return self._crypto.decrypt_text(value)
+
+    def _decrypt(self, value: str | None) -> str:
+        """Transparently decrypts a database value; plaintext is untouched."""
+        if value is None or value == "":
+            return value or ""
+        return self._crypto.decrypt_text(value)
+
+    def _migrate_encryption(self):
+        """
+        Encrypts existing plaintext sensitive fields once.
+
+        The operation is idempotent because encrypted values carry the
+        ``enc:v1:`` marker.  A full encrypted backup is created before the
+        first migration so users can roll back if a profile/key issue occurs.
+        """
+        if not self.encryption_enabled:
+            return
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        sensitive_queries = [
+            ("categories", "description", "id"),
+            ("targets", "notes", "id"),
+            ("transactions", "notes", "id"),
+            ("attachments", "original_name_enc", "id"),
+        ]
+        pending = 0
+        for table, column, pk in sensitive_queries:
+            cursor.execute(
+                f"SELECT COUNT(*) AS cnt FROM {table} "
+                f"WHERE {column} IS NOT NULL AND {column} != '' AND {column} NOT LIKE 'enc:v1:%';"
+            )
+            pending += int(cursor.fetchone()["cnt"])
+
+        if pending > 0:
+            self._create_pre_migration_backup()
+            for table, column, pk in sensitive_queries:
+                cursor.execute(
+                    f"SELECT {pk} AS row_id, {column} AS value FROM {table} "
+                    f"WHERE {column} IS NOT NULL AND {column} != '' AND {column} NOT LIKE 'enc:v1:%';"
+                )
+                rows = cursor.fetchall()
+                for row in rows:
+                    cursor.execute(
+                        f"UPDATE {table} SET {column} = ? WHERE {pk} = ?;",
+                        (self._crypto.encrypt_text(row["value"]), row["row_id"]),
+                    )
+            cursor.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('encryption_enabled', '1');")
+            conn.commit()
+
+        cursor.close()
+
+    def _create_pre_migration_backup(self):
+        """Creates an encrypted safety backup before changing stored data."""
+        if self.db_path == ":memory:":
+            return
+        try:
+            from src.storage.backup import BackupManager
+            from src.storage.paths import StoragePaths
+
+            paths = StoragePaths(os.path.dirname(os.path.abspath(self.db_path)))
+            BackupManager(paths).create_backup("pre_encryption")
+        except Exception:
+            # Migration must still proceed if a backup cannot be created; the
+            # caller can retry after resolving disk permission issues.
+            pass
+
+    def set_encryption_enabled(self, enabled: bool) -> bool:
+        """Encrypts or decrypts every sensitive field and persists the toggle."""
+        enabled = bool(enabled)
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            for table, column, pk in (
+                ("categories", "description", "id"),
+                ("targets", "notes", "id"),
+                ("transactions", "notes", "id"),
+                ("attachments", "original_name_enc", "id"),
+            ):
+                cursor.execute(f"SELECT {pk} AS row_id, {column} AS value FROM {table};")
+                for row in cursor.fetchall():
+                    value = row["value"]
+                    if value is None or value == "":
+                        continue
+                    if enabled:
+                        new_value = self._crypto.encrypt_text(value)
+                    else:
+                        new_value = self._crypto.decrypt_text(value)
+                    cursor.execute(
+                        f"UPDATE {table} SET {column} = ? WHERE {pk} = ?;",
+                        (new_value, row["row_id"]),
+                    )
+            cursor.execute(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('encryption_enabled', ?);",
+                ("1" if enabled else "0",),
+            )
+            conn.commit()
+            self.encryption_enabled = enabled
+            try:
+                from src.storage.config import get_config
+
+                get_config().set("encryption.enabled", enabled)
+            except Exception:
+                pass
+            try:
+                from src.storage.cache import get_cache
+
+                get_cache().clear()
+            except Exception:
+                pass
+            return True
+        except (sqlite3.Error, CryptoError):
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+
+    def get_data_version(self) -> int:
+        try:
+            return int(self.get_setting("data_version", "0") or "0")
+        except (TypeError, ValueError):
+            return 0
+
+    def _bump_data_version(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE app_settings SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) "
+            "WHERE key = 'data_version';"
+        )
+        conn.commit()
+        cursor.close()
 
     def _seed_initial_data_if_empty(self):
         """Seeds standard categories if DB is empty, keeping transactions at 0 for real user input."""
@@ -376,6 +571,7 @@ class DatabaseManager:
         """
         conn = self.get_connection()
         cursor = conn.cursor()
+        cursor.execute("DELETE FROM attachments;")
         cursor.execute("DELETE FROM transactions;")
         cursor.execute("DELETE FROM target_allocations;")
         cursor.execute("DELETE FROM targets;")
@@ -383,6 +579,8 @@ class DatabaseManager:
             cursor.execute("DELETE FROM categories;")
         cursor.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('database_initialized', 'true');")
         cursor.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('base_balance', '0');")
+        cursor.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('encryption_enabled', ?);",
+                       ("1" if self.encryption_enabled else "0",))
         conn.commit()
         cursor.close()
 
@@ -411,7 +609,7 @@ class DatabaseManager:
         cursor.close()
         return [
             CategoryModel(
-                r["id"], r["name"], r["type"], r["description"] or "",
+                r["id"], r["name"], r["type"], self._decrypt(r["description"]),
                 created_at=r["created_at"] or _current_timestamp_str(),
                 updated_at=r["updated_at"] or _current_timestamp_str()
             )
@@ -426,7 +624,7 @@ class DatabaseManager:
         now_ts = _current_timestamp_str()
         cursor.execute(
             "INSERT INTO categories (id, name, type, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?);",
-            (cat_id, name, cat_type, description, now_ts, now_ts)
+            (cat_id, name, cat_type, self._crypt(description), now_ts, now_ts)
         )
         conn.commit()
         cursor.close()
@@ -439,7 +637,7 @@ class DatabaseManager:
         now_ts = _current_timestamp_str()
         cursor.execute(
             "UPDATE categories SET name = ?, description = ?, updated_at = ? WHERE id = ?;",
-            (name, description, now_ts, cat_id)
+            (name, self._crypt(description), now_ts, cat_id)
         )
         conn.commit()
         updated = cursor.rowcount > 0
@@ -470,7 +668,7 @@ class DatabaseManager:
         return [
             TargetModel(
                 r["id"], r["name"], r["target_amount"], r["collected_amount"],
-                r["start_date"] or "", r["deadline_date"] or "", r["priority"] or "Sedang", r["notes"] or "",
+                r["start_date"] or "", r["deadline_date"] or "", r["priority"] or "Sedang", self._decrypt(r["notes"]),
                 created_at=r["created_at"] or _current_timestamp_str(),
                 updated_at=r["updated_at"] or _current_timestamp_str()
             )
@@ -487,7 +685,7 @@ class DatabaseManager:
         now_ts = _current_timestamp_str()
         cursor.execute(
             "INSERT INTO targets (id, name, target_amount, collected_amount, start_date, deadline_date, priority, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-            (t_id, name, target_amount, 0, start_date, deadline_date, priority, notes, now_ts, now_ts)
+            (t_id, name, target_amount, 0, start_date, deadline_date, priority, self._crypt(notes), now_ts, now_ts)
         )
         conn.commit()
         cursor.close()
@@ -500,7 +698,7 @@ class DatabaseManager:
         now_ts = _current_timestamp_str()
         cursor.execute(
             "UPDATE targets SET name = ?, target_amount = ?, deadline_date = ?, start_date = ?, priority = ?, notes = ?, updated_at = ? WHERE id = ?;",
-            (name, target_amount, deadline_date, start_date, priority, notes, now_ts, target_id)
+            (name, target_amount, deadline_date, start_date, priority, self._crypt(notes), now_ts, target_id)
         )
         conn.commit()
         updated = cursor.rowcount > 0
@@ -512,9 +710,9 @@ class DatabaseManager:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM targets WHERE id = ?;", (target_id,))
+        deleted = cursor.rowcount > 0
         cursor.execute("DELETE FROM target_allocations WHERE target_id = ?;", (target_id,))
         conn.commit()
-        deleted = cursor.rowcount > 0
         cursor.close()
         return deleted
 
@@ -551,7 +749,7 @@ class DatabaseManager:
         tx_id = f"tx_alloc_{str(uuid.uuid4())[:6]}"
         cursor.execute(
             "INSERT INTO transactions (id, type, category, amount, date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-            (tx_id, TransactionType.TARGET, target_name, amount, tx_date, notes or f"Tabungan ke {target_name}", now_ts, now_ts)
+            (tx_id, TransactionType.TARGET, target_name, amount, tx_date, self._crypt(notes or f"Tabungan ke {target_name}"), now_ts, now_ts)
         )
 
         conn.commit()
@@ -590,7 +788,7 @@ class DatabaseManager:
         cursor.close()
         return [
             TransactionModel(
-                r["id"], r["type"], r["category"], r["amount"], r["date"], r["notes"] or "",
+                r["id"], r["type"], r["category"], r["amount"], r["date"], self._decrypt(r["notes"]),
                 created_at=r["created_at"] or _current_timestamp_str(),
                 updated_at=r["updated_at"] or _current_timestamp_str()
             )
@@ -605,7 +803,7 @@ class DatabaseManager:
         now_ts = _current_timestamp_str()
         cursor.execute(
             "INSERT INTO transactions (id, type, category, amount, date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-            (tx_id, tx_type, category, amount, tx_date, notes, now_ts, now_ts)
+            (tx_id, tx_type, category, amount, tx_date, self._crypt(notes), now_ts, now_ts)
         )
         conn.commit()
         cursor.close()
@@ -631,7 +829,7 @@ class DatabaseManager:
             "INSERT INTO transactions (id, type, category, amount, date, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
             [
                 (
-                    tx.id, tx.type, tx.category, tx.amount, tx.date, tx.notes,
+                    tx.id, tx.type, tx.category, tx.amount, tx.date, self._crypt(tx.notes),
                     getattr(tx, "created_at", now_ts), getattr(tx, "updated_at", now_ts)
                 )
                 for tx in transactions
@@ -663,9 +861,11 @@ class DatabaseManager:
         return int(total)
 
     def get_total_target_terkumpul(self) -> int:
+        # Progress is derived from allocations ("by code"), not the fragile
+        # targets.collected_amount column.
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT COALESCE(SUM(collected_amount), 0) AS total FROM targets;")
+        cursor.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM target_allocations;")
         total = cursor.fetchone()["total"]
         cursor.close()
         return int(total)
@@ -700,6 +900,128 @@ class DatabaseManager:
         exp = int(row["exp"])
         tgt = int(row["tgt"])
         return base_balance + inc - exp - tgt
+
+    # =========================================================================
+    # ATTACHMENT CRUD (local file storage)
+    # =========================================================================
+
+    def add_attachment(
+        self,
+        transaction_id: str,
+        stored_name: str,
+        original_name: str,
+        mime_type: str = "application/octet-stream",
+        size_bytes: int = 0,
+        sha256: str = "",
+    ) -> AttachmentModel:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        attachment_id = str(uuid.uuid4())[:8]
+        now_ts = _current_timestamp_str()
+        cursor.execute(
+            """
+            INSERT INTO attachments
+                (id, transaction_id, stored_name, original_name_enc, mime_type, size_bytes, sha256, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                attachment_id, transaction_id, stored_name, self._crypt(original_name),
+                mime_type, int(size_bytes), sha256, now_ts,
+            ),
+        )
+        conn.commit()
+        cursor.close()
+        return AttachmentModel(
+            attachment_id, transaction_id, stored_name, original_name,
+            mime_type, int(size_bytes), sha256, now_ts,
+        )
+
+    def get_attachment(self, attachment_id: str) -> Optional[AttachmentModel]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, transaction_id, stored_name, original_name_enc, mime_type, size_bytes, sha256, created_at "
+            "FROM attachments WHERE id = ?;",
+            (attachment_id,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        if not row:
+            return None
+        return AttachmentModel(
+            row["id"], row["transaction_id"], row["stored_name"], self._decrypt(row["original_name_enc"]),
+            row["mime_type"] or "application/octet-stream", int(row["size_bytes"] or 0),
+            row["sha256"] or "", row["created_at"] or _current_timestamp_str(),
+        )
+
+    def get_attachment_for_transaction(self, transaction_id: str) -> Optional[AttachmentModel]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, transaction_id, stored_name, original_name_enc, mime_type, size_bytes, sha256, created_at "
+            "FROM attachments WHERE transaction_id = ? ORDER BY created_at DESC LIMIT 1;",
+            (transaction_id,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        if not row:
+            return None
+        return AttachmentModel(
+            row["id"], row["transaction_id"], row["stored_name"], self._decrypt(row["original_name_enc"]),
+            row["mime_type"] or "application/octet-stream", int(row["size_bytes"] or 0),
+            row["sha256"] or "", row["created_at"] or _current_timestamp_str(),
+        )
+
+    def get_attachments_map(self) -> Dict[str, AttachmentModel]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, transaction_id, stored_name, original_name_enc, mime_type, size_bytes, sha256, created_at "
+            "FROM attachments ORDER BY created_at ASC;"
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        result: Dict[str, AttachmentModel] = {}
+        for row in rows:
+            result[row["transaction_id"]] = AttachmentModel(
+                row["id"], row["transaction_id"], row["stored_name"], self._decrypt(row["original_name_enc"]),
+                row["mime_type"] or "application/octet-stream", int(row["size_bytes"] or 0),
+                row["sha256"] or "", row["created_at"] or _current_timestamp_str(),
+            )
+        return result
+
+    def get_all_attachments(self) -> List[AttachmentModel]:
+        return list(self.get_attachments_map().values())
+
+    def delete_attachment(self, attachment_id: str) -> bool:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM attachments WHERE id = ?;", (attachment_id,))
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        cursor.close()
+        return deleted
+
+    def delete_attachments_for_transaction(self, transaction_id: str) -> List[AttachmentModel]:
+        attachments = []
+        existing = self.get_attachment_for_transaction(transaction_id)
+        if existing:
+            attachments.append(existing)
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM attachments WHERE transaction_id = ?;", (transaction_id,))
+        conn.commit()
+        cursor.close()
+        return attachments
+
+    def delete_all_attachments(self) -> List[AttachmentModel]:
+        attachments = self.get_all_attachments()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM attachments;")
+        conn.commit()
+        cursor.close()
+        return attachments
 
     # =========================================================================
     # SETTINGS & DIAGNOSTICS
@@ -747,6 +1069,9 @@ class DatabaseManager:
         cursor.execute("SELECT COUNT(*) AS total FROM target_allocations;")
         alloc_count = cursor.fetchone()["total"]
 
+        cursor.execute("SELECT COUNT(*) AS total FROM attachments;")
+        attachment_count = cursor.fetchone()["total"]
+
         cursor.execute("PRAGMA journal_mode;")
         journal_mode = cursor.fetchone()[0]
 
@@ -764,6 +1089,8 @@ class DatabaseManager:
             "category_count": cat_count,
             "target_count": tgt_count,
             "allocation_count": alloc_count,
+            "attachment_count": attachment_count,
+            "data_version": self.get_data_version(),
             "status": "Connected & Persistent"
         }
 

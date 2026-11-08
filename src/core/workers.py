@@ -23,6 +23,177 @@ class WorkerSignals(QObject):
     error = Signal(str)          # error message
 
 
+def build_history_payload(
+    transactions_snapshot: list,
+    filter_type: str,
+    filter_category: str,
+    start_date: str,
+    end_date: str,
+    page_size: int = 50,
+    current_page: int = 1,
+    base_balance: int = 0,
+    search_text: str = "",
+    attachments_snapshot: dict | None = None,
+    progress_callback=None,
+    cancelled=None,
+    simulate_workload: bool = False,
+) -> dict:
+    """
+    Single source of truth for history filtering, running balances, summaries,
+    and pagination.  Both the QThread worker and the synchronous test path call
+    this function so their numbers can never diverge.
+    """
+    transactions = list(transactions_snapshot)
+    attachments = attachments_snapshot or {}
+    total_raw = len(transactions)
+    page_size = max(10, int(page_size))
+    current_page = max(1, int(current_page))
+    search_lower = (search_text or "").strip().lower()
+
+    if progress_callback:
+        progress_callback(10, f"Memuat {total_raw:,} data transaksi di background thread...")
+    if simulate_workload and total_raw < 500:
+        time.sleep(0.06)
+    if cancelled and cancelled():
+        return {}
+
+    # 1. Running balance chronologically (oldest to newest)
+    running_balance = int(base_balance or 0)
+    tx_items_with_balance = []
+    step_interval = max(1, total_raw // 5)
+    for idx, tx in enumerate(reversed(transactions)):
+        if cancelled and cancelled():
+            return {}
+        if tx.type == TransactionType.PEMASUKAN:
+            running_balance += tx.amount
+            nominal_str = format_rupiah(tx.amount)
+            color = "#7FAE8A"
+        elif tx.type == TransactionType.PENGELUARAN:
+            running_balance -= tx.amount
+            nominal_str = f"-{format_rupiah(tx.amount)}"
+            color = "#C98787"
+        else:
+            running_balance -= tx.amount
+            nominal_str = format_rupiah(tx.amount)
+            color = "#A99ABF"
+
+        attachment = attachments.get(tx.id)
+        attachment_payload = None
+        if attachment is not None:
+            attachment_payload = {
+                "id": attachment.id,
+                "stored_name": attachment.stored_name,
+                "original_name": attachment.original_name,
+                "mime_type": attachment.mime_type,
+                "size_bytes": attachment.size_bytes,
+            }
+
+        tx_items_with_balance.append({
+            "id": tx.id,
+            "date": tx.date,
+            "type": tx.type,
+            "category": tx.category,
+            "notes": tx.notes,
+            "nominal": tx.amount,
+            "nominal_formatted": nominal_str,
+            "saldo_setelah": format_rupiah(running_balance),
+            "color": color,
+            "attachment": attachment_payload,
+            "created_at": getattr(tx, "created_at", "") or "",
+            "updated_at": getattr(tx, "updated_at", "") or "",
+        })
+
+        if progress_callback and (idx + 1) % step_interval == 0:
+            pct = 15 + int((idx / max(1, total_raw)) * 25)
+            progress_callback(pct, f"Menghitung saldo berjalan ({idx + 1}/{total_raw})...")
+
+    tx_items_with_balance.reverse()
+
+    if progress_callback:
+        progress_callback(45, "Menerapkan kriteria filter...")
+    if simulate_workload and total_raw < 500:
+        time.sleep(0.06)
+
+    # 2. Date range + type/category/text filtering
+    start_dt = None
+    end_dt = None
+    try:
+        start_dt = datetime.strptime(start_date, "%d/%m/%Y").date() if start_date else None
+    except ValueError:
+        start_dt = None
+    try:
+        end_dt = datetime.strptime(end_date, "%d/%m/%Y").date() if end_date else None
+    except ValueError:
+        end_dt = None
+
+    filtered_items = []
+    for item in tx_items_with_balance:
+        if cancelled and cancelled():
+            return {}
+        if filter_type != "Semua" and item["type"] != filter_type:
+            continue
+        if filter_category != "Semua" and item["category"] != filter_category:
+            continue
+        if search_lower:
+            haystack = f"{item['notes']} {item['category']}".lower()
+            if search_lower not in haystack:
+                continue
+        if start_dt or end_dt:
+            try:
+                tx_dt = datetime.strptime(item["date"], "%d/%m/%Y").date()
+            except ValueError:
+                continue
+            if start_dt and tx_dt < start_dt:
+                continue
+            if end_dt and tx_dt > end_dt:
+                continue
+        filtered_items.append(item)
+
+    if progress_callback:
+        progress_callback(70, "Mengagregasi metrik ringkasan...")
+
+    # 3. Summary metrics (accurate even for an empty result set)
+    total_pemasukan = sum(item["nominal"] for item in filtered_items if item["type"] == TransactionType.PEMASUKAN)
+    total_pengeluaran = sum(item["nominal"] for item in filtered_items if item["type"] == TransactionType.PENGELUARAN)
+    saldo_bersih = total_pemasukan - total_pengeluaran
+
+    summary = {
+        "total_pemasukan": format_rupiah(total_pemasukan),
+        "total_pengeluaran": format_rupiah(total_pengeluaran),
+        "saldo_bersih": format_rupiah(saldo_bersih),
+        "jumlah_transaksi": str(len(filtered_items)),
+    }
+
+    # 4. Virtual window pagination
+    total_items = len(filtered_items)
+    total_pages = max(1, math.ceil(total_items / page_size))
+    target_page = max(1, min(current_page, total_pages))
+    start_idx = (target_page - 1) * page_size
+    end_idx = min(start_idx + page_size, total_items)
+    page_items = filtered_items[start_idx:end_idx]
+
+    pagination_info = {
+        "current_page": target_page,
+        "total_pages": total_pages,
+        "total_records": total_items,
+        "start_index": start_idx + 1 if total_items > 0 else 0,
+        "end_index": end_idx,
+        "has_prev": target_page > 1,
+        "has_next": target_page < total_pages,
+    }
+
+    if progress_callback:
+        progress_callback(100, "Pemrosesan selesai.")
+
+    return {
+        "filtered_items": filtered_items,
+        "page_items": page_items,
+        "summary": summary,
+        "pagination_info": pagination_info,
+        "total_count": total_items,
+    }
+
+
 class GenericWorker(QRunnable):
     """
     Reusable worker runnable to execute any callable function in a QThreadPool background thread.
@@ -73,6 +244,8 @@ class FilterTransactionsWorker(QThread):
         current_page: int = 1,
         simulate_workload: bool = False,
         base_balance: int = 0,
+        search_text: str = "",
+        attachments_snapshot: dict | None = None,
         parent=None
     ):
         super().__init__(parent)
@@ -85,6 +258,8 @@ class FilterTransactionsWorker(QThread):
         self.current_page = current_page
         self.simulate_workload = simulate_workload
         self.base_balance = base_balance
+        self.search_text = search_text
+        self.attachments = dict(attachments_snapshot or {})
         self._is_cancelled = False
 
     def cancel(self):
@@ -93,149 +268,23 @@ class FilterTransactionsWorker(QThread):
 
     def run(self):
         try:
-            total_raw = len(self.transactions)
-            self.progress.emit(10, f"Memuat {total_raw:,} data transaksi di background thread...")
-
-            if self.simulate_workload and total_raw < 500:
-                time.sleep(0.08)
-
-            if self._is_cancelled:
-                return
-
-            # 1. Calculate running balance chronologically (oldest to newest)
-            running_balance = self.base_balance
-            tx_items_with_balance = []
-
-            step_interval = max(1, total_raw // 5)
-            for idx, tx in enumerate(reversed(self.transactions)):
-                if self._is_cancelled:
-                    return
-
-                if tx.type == TransactionType.PEMASUKAN:
-                    running_balance += tx.amount
-                    nominal_str = format_rupiah(tx.amount)
-                    color = "#7FAE8A"
-                elif tx.type == TransactionType.PENGELUARAN:
-                    running_balance -= tx.amount
-                    nominal_str = f"-{format_rupiah(tx.amount)}"
-                    color = "#C98787"
-                else:  # Target
-                    running_balance -= tx.amount
-                    nominal_str = format_rupiah(tx.amount)
-                    color = "#A99ABF"
-
-                tx_items_with_balance.append({
-                    "id": tx.id,
-                    "date": tx.date,
-                    "type": tx.type,
-                    "category": tx.category,
-                    "notes": tx.notes,
-                    "nominal": tx.amount,
-                    "nominal_formatted": nominal_str,
-                    "saldo_setelah": format_rupiah(running_balance),
-                    "color": color,
-                    "created_at": getattr(tx, "created_at", "") or "",
-                    "updated_at": getattr(tx, "updated_at", "") or ""
-                })
-
-                if (idx + 1) % step_interval == 0:
-                    pct = 15 + int((idx / max(1, total_raw)) * 25)
-                    self.progress.emit(pct, f"Menghitung saldo berjalan ({idx + 1}/{total_raw})...")
-
-            # Back to newest first
-            tx_items_with_balance.reverse()
-
-            self.progress.emit(45, "Menerapkan kriteria filter...")
-            if self.simulate_workload and total_raw < 500:
-                time.sleep(0.08)
-
-            # 2. Apply filtering
-            filtered_items = []
-            
-            # Optional date parsing for range check
-            start_dt = None
-            end_dt = None
-            if self.start_date:
-                try:
-                    start_dt = datetime.strptime(self.start_date, "%d/%m/%Y").date()
-                except ValueError:
-                    start_dt = None
-            if self.end_date:
-                try:
-                    end_dt = datetime.strptime(self.end_date, "%d/%m/%Y").date()
-                except ValueError:
-                    end_dt = None
-
-            for item in tx_items_with_balance:
-                if self._is_cancelled:
-                    return
-
-                if self.filter_type != "Semua" and item["type"] != self.filter_type:
-                    continue
-                if self.filter_category != "Semua" and item["category"] != self.filter_category:
-                    continue
-
-                if start_dt or end_dt:
-                    try:
-                        tx_dt = datetime.strptime(item["date"], "%d/%m/%Y").date()
-                        if start_dt and tx_dt < start_dt:
-                            continue
-                        if end_dt and tx_dt > end_dt:
-                            continue
-                    except ValueError:
-                        pass
-
-                filtered_items.append(item)
-
-            self.progress.emit(70, "Mengagregasi metrik ringkasan...")
-            if self.simulate_workload and total_raw < 500:
-                time.sleep(0.08)
-
-            # 3. Calculate summary metrics
-            total_pemasukan = sum(item["nominal"] for item in filtered_items if item["type"] == TransactionType.PEMASUKAN)
-            total_pengeluaran = sum(item["nominal"] for item in filtered_items if item["type"] == TransactionType.PENGELUARAN)
-            saldo_bersih = total_pemasukan - total_pengeluaran
-
-            summary = {
-                "total_pemasukan": format_rupiah(total_pemasukan or 10_000_000),
-                "total_pengeluaran": format_rupiah(total_pengeluaran or 3_200_000),
-                "saldo_bersih": format_rupiah(saldo_bersih if saldo_bersih != 0 else 6_800_000),
-                "jumlah_transaksi": str(len(filtered_items) if filtered_items else 12)
-            }
-
-            self.progress.emit(88, "Menyiapkan virtual window pagination...")
-
-            # 4. Compute pagination slice
-            total_items = len(filtered_items)
-            total_pages = max(1, math.ceil(total_items / self.page_size))
-            target_page = max(1, min(self.current_page, total_pages))
-
-            start_idx = (target_page - 1) * self.page_size
-            end_idx = min(start_idx + self.page_size, total_items)
-            page_items = filtered_items[start_idx:end_idx]
-
-            pagination_info = {
-                "current_page": target_page,
-                "total_pages": total_pages,
-                "total_records": total_items,
-                "start_index": start_idx + 1 if total_items > 0 else 0,
-                "end_index": end_idx,
-                "has_prev": target_page > 1,
-                "has_next": target_page < total_pages
-            }
-
-            self.progress.emit(100, "Pemrosesan selesai.")
-
-            payload = {
-                "filtered_items": filtered_items,
-                "page_items": page_items,
-                "summary": summary,
-                "pagination_info": pagination_info,
-                "total_count": total_items
-            }
-
-            self.result_ready.emit(payload)
-
+            payload = build_history_payload(
+                transactions_snapshot=self.transactions,
+                filter_type=self.filter_type,
+                filter_category=self.filter_category,
+                start_date=self.start_date,
+                end_date=self.end_date,
+                page_size=self.page_size,
+                current_page=self.current_page,
+                base_balance=self.base_balance,
+                search_text=self.search_text,
+                attachments_snapshot=self.attachments,
+                progress_callback=self.progress.emit,
+                cancelled=lambda: self._is_cancelled,
+                simulate_workload=self.simulate_workload,
+            )
+            if payload:
+                self.result_ready.emit(payload)
         except Exception as e:
             self.error.emit(str(e))
 

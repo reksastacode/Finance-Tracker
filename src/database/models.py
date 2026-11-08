@@ -58,3 +58,15 @@ class TargetAllocationModel:
     date: str  # "DD/MM/YYYY"
     notes: str = ""
     created_at: str = field(default_factory=_current_timestamp_str)
+
+
+@dataclass
+class AttachmentModel:
+    id: str
+    transaction_id: str
+    stored_name: str
+    original_name: str
+    mime_type: str = "application/octet-stream"
+    size_bytes: int = 0
+    sha256: str = ""
+    created_at: str = field(default_factory=_current_timestamp_str)

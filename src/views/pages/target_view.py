@@ -33,11 +33,16 @@ class TargetFormDialog(QDialog):
         main_layout.setContentsMargins(10, 10, 10, 10)
 
         box = QFrame()
+        box.setObjectName("targetFormBox")
         box.setStyleSheet(f"""
-            QFrame {{
+            QFrame#targetFormBox {{
                 background-color: #FFFFFF;
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 16px;
+            }}
+            QFrame#targetFormBox QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         box_layout = QVBoxLayout(box)
@@ -106,7 +111,7 @@ class TargetFormDialog(QDialog):
         c2.addLayout(c2_hdr)
         self.deadline_date_edit = QDateEdit()
         self.deadline_date_edit.setCalendarPopup(True)
-        self.deadline_date_edit.setDate(QDate(2027, 12, 25))
+        self.deadline_date_edit.setDate(QDate.currentDate().addYears(1))
         self.deadline_date_edit.setDisplayFormat("dd/MM/yyyy")
         c2.addWidget(self.deadline_date_edit)
         dates_row.addLayout(c2)
@@ -216,10 +221,10 @@ class TargetView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_total_aktif = SummaryCardWidget("Total Target", "6 Aktif", svg_icon=AppIcons.TARGET_TOTAL)
-        self.card_goal_amount = SummaryCardWidget("Total Target Keuangan", "Rp. 18.111.000", svg_icon=AppIcons.TARGET_TOTAL)
-        self.card_terkumpul = SummaryCardWidget("Terkumpul", "Rp. 5.100.000", svg_icon=AppIcons.TARGET_TERKUMPUL)
-        self.card_progress_total = SummaryCardWidget("Seluruh Progress", "20% Dari Target", svg_icon=AppIcons.TARGET_PROGRESS)
+        self.card_total_aktif = SummaryCardWidget("Total Target", "0 Aktif", svg_icon=AppIcons.TARGET_TOTAL)
+        self.card_goal_amount = SummaryCardWidget("Total Target Keuangan", "Rp 0", svg_icon=AppIcons.TARGET_TOTAL)
+        self.card_terkumpul = SummaryCardWidget("Terkumpul", "Rp 0", svg_icon=AppIcons.TARGET_TERKUMPUL)
+        self.card_progress_total = SummaryCardWidget("Seluruh Progress", "0% Dari Target", svg_icon=AppIcons.TARGET_PROGRESS)
 
         summary_row.addWidget(self.card_total_aktif)
         summary_row.addWidget(self.card_goal_amount)
@@ -268,11 +273,16 @@ class TargetView(QWidget):
 
         # Tips Menabung Card
         tips_box = QFrame()
+        tips_box.setObjectName("targetTipsCard")
         tips_box.setStyleSheet(f"""
-            QFrame {{
+            QFrame#targetTipsCard {{
                 background-color: {AppColors.CARD_BG};
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 12px;
+            }}
+            QFrame#targetTipsCard QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         tips_l = QVBoxLayout(tips_box)
@@ -298,11 +308,16 @@ class TargetView(QWidget):
 
         # Aktivitas Terbaru Card
         self.activity_box = QFrame()
+        self.activity_box.setObjectName("targetActivityCard")
         self.activity_box.setStyleSheet(f"""
-            QFrame {{
+            QFrame#targetActivityCard {{
                 background-color: {AppColors.CARD_BG};
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 12px;
+            }}
+            QFrame#targetActivityCard QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         act_l = QVBoxLayout(self.activity_box)
@@ -393,7 +408,18 @@ class TargetView(QWidget):
 
         for a in allocs[:3]:
             row = QFrame()
-            row.setStyleSheet("background: transparent; border-bottom: 1px solid #F0EDE6;")
+            row.setObjectName("targetActivityRow")
+            row.setStyleSheet("""
+                QFrame#targetActivityRow {
+                    background: transparent;
+                    border: none;
+                    border-bottom: 1px solid #F0EDE6;
+                }
+                QFrame#targetActivityRow QLabel {
+                    background: transparent;
+                    border: none;
+                }
+            """)
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 4, 0, 4)
             rl.setSpacing(8)

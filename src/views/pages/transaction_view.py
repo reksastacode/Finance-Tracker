@@ -4,19 +4,24 @@ Provides the form for adding income or expense records.
 Demonstrates input listeners, live character counter, dynamic dropdown population,
 and form lifecycle events.
 """
+import os
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QComboBox, QPushButton, QFrame, QDateEdit)
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QPushButton, QFrame, QDateEdit, QScrollArea,
+    QFileDialog)
 from PySide6.QtCore import Qt, QDate, Slot, QSize
 from src.core.constants import AppColors, TransactionType
 from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.transaction_viewmodel import TransactionViewModel
 from src.views.components.header import HeaderWidget
+from src.views.components.elided_label import ElidedLabel
 
 class TransactionInputView(QWidget):
     def __init__(self, viewmodel: TransactionViewModel, parent=None):
         super().__init__(parent)
         self.vm = viewmodel
+        self._attachment_path = ""
         self._setup_ui()
         self._bind_viewmodel()
 
@@ -36,13 +41,18 @@ class TransactionInputView(QWidget):
         center_layout.addStretch()
 
         form_card = QFrame()
+        form_card.setObjectName("transactionFormCard")
         form_card.setProperty("class", "card")
         form_card.setFixedWidth(520)
         form_card.setStyleSheet(f"""
-            QFrame {{
+            QFrame#transactionFormCard {{
                 background-color: {AppColors.CARD_BG};
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 16px;
+            }}
+            QFrame#transactionFormCard QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         card_layout = QVBoxLayout(form_card)
@@ -112,7 +122,66 @@ class TransactionInputView(QWidget):
         counter_layout.addWidget(self.char_count_lbl)
         card_layout.addLayout(counter_layout)
 
-        card_layout.addSpacing(10)
+        # Field 6: Lampiran struk (stored encrypted outside the database)
+        attach_hdr = QHBoxLayout()
+        attach_hdr.setSpacing(6)
+        attach_hdr.addWidget(create_svg_label(AppIcons.UTIL_PAPERCLIP, 14, 14))
+        attach_hdr.addWidget(QLabel("Lampiran struk (opsional)", styleSheet="font-size: 12px; font-weight: 600; color: #4A5568;"))
+        attach_hdr.addStretch()
+        card_layout.addLayout(attach_hdr)
+
+        attach_row = QHBoxLayout()
+        attach_row.setSpacing(8)
+        self.attach_btn = QPushButton("  Pilih File")
+        self.attach_btn.setIcon(get_svg_icon(AppIcons.UTIL_PAPERCLIP, 14, 14, "#4A5568"))
+        self.attach_btn.setIconSize(QSize(14, 14))
+        self.attach_btn.setCursor(Qt.PointingHandCursor)
+        self.attach_btn.setFixedHeight(32)
+        self.attach_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FAF8F5;
+                color: #4A5568;
+                border: 1px solid #CBD5E0;
+                border-radius: 7px;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 0 12px;
+            }
+            QPushButton:hover {
+                background-color: #EDF2F7;
+                border-color: #A0AEC0;
+            }
+        """)
+        self.attach_btn.clicked.connect(self._on_pick_attachment)
+
+        self.attach_lbl = ElidedLabel("Gambar/PDF/TXT, maks. 10 MB")
+        self.attach_lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_MUTED};")
+
+        self.attach_clear_btn = QPushButton("Hapus")
+        self.attach_clear_btn.setCursor(Qt.PointingHandCursor)
+        self.attach_clear_btn.setFixedHeight(32)
+        self.attach_clear_btn.setVisible(False)
+        self.attach_clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #C98787;
+                border: none;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 0 6px;
+            }
+            QPushButton:hover {
+                color: #A85F5F;
+            }
+        """)
+        self.attach_clear_btn.clicked.connect(self._clear_attachment)
+
+        attach_row.addWidget(self.attach_btn)
+        attach_row.addWidget(self.attach_lbl, 1)
+        attach_row.addWidget(self.attach_clear_btn)
+        card_layout.addLayout(attach_row)
+
+        card_layout.addSpacing(6)
 
         # Buttons (Batal & Simpan Transaksi)
         btn_layout = QHBoxLayout()
@@ -159,8 +228,11 @@ class TransactionInputView(QWidget):
         center_layout.addWidget(form_card)
         center_layout.addStretch()
 
-        main_layout.addWidget(center_container)
-        main_layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(center_container)
+        main_layout.addWidget(scroll, 1)
 
     def _bind_viewmodel(self):
         # ViewModel Signals -> View Slots
@@ -200,6 +272,37 @@ class TransactionInputView(QWidget):
             self.nominal_input.setText(formatted)
             self.nominal_input.blockSignals(False)
 
+    def _on_pick_attachment(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Pilih Lampiran Struk",
+            "",
+            "Lampiran (*.png *.jpg *.jpeg *.webp *.gif *.bmp *.pdf *.txt);;Semua File (*)",
+        )
+        if not path:
+            return
+        try:
+            from src.storage.attachments import get_attachment_service
+            from src.storage.file_store import human_size
+
+            source, size, _mime = get_attachment_service().validate(path)
+        except Exception as exc:
+            self.vm.notify_toast(str(exc), "warning")
+            return
+
+        self._attachment_path = str(source)
+        self.attach_lbl.setText(f"{os.path.basename(str(source))} ({human_size(size)})")
+        self.attach_lbl.setToolTip(str(source))
+        self.attach_lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_PRIMARY}; font-weight: 600;")
+        self.attach_clear_btn.setVisible(True)
+
+    def _clear_attachment(self):
+        self._attachment_path = ""
+        self.attach_lbl.setText("Gambar/PDF/TXT, maks. 10 MB")
+        self.attach_lbl.setToolTip("")
+        self.attach_lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_MUTED};")
+        self.attach_clear_btn.setVisible(False)
+
     def _on_simpan_clicked(self):
         tx_type = self.jenis_combo.currentData() or TransactionType.PEMASUKAN
         raw_amt = self.nominal_input.text()
@@ -207,7 +310,10 @@ class TransactionInputView(QWidget):
         dt_str = self.tanggal_edit.date().toString("dd/MM/yyyy")
         notes = self.keterangan_input.text()
 
-        self.vm.save_transaction(tx_type, raw_amt, category, dt_str, notes)
+        self.vm.save_transaction(
+            tx_type, raw_amt, category, dt_str, notes,
+            attachment_path=self._attachment_path,
+        )
 
     @Slot(bool, str)
     def _on_transaction_saved(self, success: bool, message: str):
@@ -220,3 +326,4 @@ class TransactionInputView(QWidget):
         self.nominal_input.blockSignals(False)
         self.keterangan_input.setText("")
         self.char_count_lbl.setText("0/100")
+        self._clear_attachment()

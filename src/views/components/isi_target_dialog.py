@@ -29,11 +29,16 @@ class IsiTargetDialog(QDialog):
 
         # Dialog Box Container
         box = QFrame()
+        box.setObjectName("isiTargetBox")
         box.setStyleSheet(f"""
-            QFrame {{
+            QFrame#isiTargetBox {{
                 background-color: #FFFFFF;
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 16px;
+            }}
+            QFrame#isiTargetBox QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         box_layout = QVBoxLayout(box)
@@ -93,11 +98,16 @@ class IsiTargetDialog(QDialog):
 
         # 3. Target Stats Box (Target, Terkumpul, Sisa)
         stats_box = QFrame()
+        stats_box.setObjectName("isiTargetStats")
         stats_box.setStyleSheet("""
-            QFrame {
+            QFrame#isiTargetStats {
                 background-color: #FBF9F5;
                 border: 1px solid #F0EDE6;
                 border-radius: 8px;
+            }
+            QFrame#isiTargetStats QLabel {
+                background: transparent;
+                border: none;
             }
         """)
         stats_layout = QHBoxLayout(stats_box)
@@ -134,10 +144,15 @@ class IsiTargetDialog(QDialog):
 
         # 5. Saldo Tersedia Box
         saldo_box = QFrame()
+        saldo_box.setObjectName("isiTargetSaldo")
         saldo_box.setStyleSheet("""
-            QFrame {
+            QFrame#isiTargetSaldo {
                 background-color: #E8F5E9;
                 border-radius: 8px;
+            }
+            QFrame#isiTargetSaldo QLabel {
+                background: transparent;
+                border: none;
             }
         """)
         s_layout = QHBoxLayout(saldo_box)

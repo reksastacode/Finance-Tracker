@@ -6,12 +6,14 @@ Implements event listeners for month changes based on system date.
 from datetime import date
 import calendar
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QWidget
+    QFrame, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QComboBox, QWidget,
+    QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal
 from src.core.constants import AppColors
 from src.core.utils import BULAN
 from src.core.assets import AppIcons, create_svg_label
+from src.views.components.elided_label import ElidedLabel
 
 class CalendarWidget(QFrame):
     month_changed = Signal(int, int)
@@ -27,6 +29,7 @@ class CalendarWidget(QFrame):
     def _setup_ui(self):
         self.setProperty("class", "card")
         self.setFixedHeight(340)
+        self.setMinimumWidth(0)
         self.setStyleSheet(f"""
             CalendarWidget {{
                 background-color: {AppColors.CARD_BG};
@@ -48,19 +51,18 @@ class CalendarWidget(QFrame):
         header_layout.setSpacing(8)
 
         title_icon = create_svg_label(AppIcons.DASHBOARD_KALENDER, 20, 20)
-        title = QLabel("Kalender Transaksi")
+        title = ElidedLabel("Kalender Transaksi")
         title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
 
         header_layout.addWidget(title_icon)
-        header_layout.addWidget(title)
-        header_layout.addStretch()
+        header_layout.addWidget(title, 1)
 
         # Month Selector (Populated dynamically with current year's months)
         self.month_combo = QComboBox()
         month_items = [f"{m} {self.year}" for m in BULAN]
         self.month_combo.addItems(month_items)
         self.month_combo.setCurrentIndex(max(0, self.month - 1))
-        self.month_combo.setFixedWidth(195)
+        self.month_combo.setFixedWidth(165)
         self.month_combo.setFixedHeight(34)
         self.month_combo.currentIndexChanged.connect(self._on_month_combo_changed)
         header_layout.addWidget(self.month_combo)
@@ -73,16 +75,19 @@ class CalendarWidget(QFrame):
 
         def make_legend(color, text):
             frame = QFrame()
+            frame.setMinimumWidth(0)
+            frame.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             frame.setStyleSheet("background: transparent; border: none;")
             fl = QHBoxLayout(frame)
             fl.setContentsMargins(0, 0, 0, 0)
             fl.setSpacing(4)
             dot = QLabel("●")
+            dot.setFixedWidth(12)
             dot.setStyleSheet(f"color: {color}; font-size: 11px; background: transparent; border: none;")
-            lbl = QLabel(text)
+            lbl = ElidedLabel(text)
             lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600; background: transparent; border: none;")
             fl.addWidget(dot)
-            fl.addWidget(lbl)
+            fl.addWidget(lbl, 1)
             return frame
 
         legend_layout.addWidget(make_legend(AppColors.TARGET, "Target"))
@@ -93,6 +98,7 @@ class CalendarWidget(QFrame):
 
         # Calendar Grid Container
         self.grid_widget = QWidget()
+        self.grid_widget.setMinimumWidth(0)
         self.grid_widget.setStyleSheet("background: transparent; border: none;")
         self.grid_layout = QGridLayout(self.grid_widget)
         self.grid_layout.setContentsMargins(0, 2, 0, 0)
@@ -121,10 +127,13 @@ class CalendarWidget(QFrame):
             if widget:
                 widget.deleteLater()
 
-        # Day Headers (Minggu to Sabtu)
-        days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
-        for col, day_name in enumerate(days):
+        # Day Headers (Min to Sab; compact enough for narrow windows)
+        days = [("Min", "Minggu"), ("Sen", "Senin"), ("Sel", "Selasa"),
+                ("Rab", "Rabu"), ("Kam", "Kamis"), ("Jum", "Jumat"), ("Sab", "Sabtu")]
+        for col, (day_name, full_name) in enumerate(days):
             hdr = QLabel(day_name)
+            hdr.setToolTip(full_name)
+            hdr.setMinimumWidth(0)
             hdr.setAlignment(Qt.AlignCenter)
             hdr.setFixedHeight(24)
             hdr.setStyleSheet(f"""
@@ -138,6 +147,7 @@ class CalendarWidget(QFrame):
                 }}
             """)
             self.grid_layout.addWidget(hdr, 0, col)
+            self.grid_layout.setColumnStretch(col, 1)
 
         # Month matrix (Sunday first: Sunday=6 in standard weekday, mapped to 0)
         cal = calendar.Calendar(firstweekday=6)
@@ -146,12 +156,18 @@ class CalendarWidget(QFrame):
         for row_idx, week in enumerate(month_days):
             for col_idx, day_num in enumerate(week):
                 cell = QFrame()
+                cell.setObjectName("calendarCell")
+                cell.setMinimumWidth(0)
                 cell.setFixedHeight(34)
                 cell.setStyleSheet(f"""
-                    QFrame {{
+                    QFrame#calendarCell {{
                         background-color: {'#FFFFFF' if day_num > 0 else 'transparent'};
                         border: 1px solid {'#F0EDE6' if day_num > 0 else 'transparent'};
                         border-radius: 4px;
+                    }}
+                    QFrame#calendarCell QLabel {{
+                        background: transparent;
+                        border: none;
                     }}
                 """)
                 cell_layout = QVBoxLayout(cell)
@@ -160,6 +176,7 @@ class CalendarWidget(QFrame):
 
                 if day_num > 0:
                     day_lbl = QLabel(str(day_num))
+                    day_lbl.setMinimumWidth(0)
                     day_lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_PRIMARY}; font-weight: 600; background: transparent; border: none;")
                     cell_layout.addWidget(day_lbl, 0, Qt.AlignLeft | Qt.AlignTop)
 
@@ -167,7 +184,7 @@ class CalendarWidget(QFrame):
                     if day_num in self.events:
                         ev_list = self.events[day_num]
                         for ev in ev_list:
-                            tag_lbl = QLabel(ev["label"])
+                            tag_lbl = ElidedLabel(ev["label"])
                             tag_lbl.setStyleSheet(f"""
                                 QLabel {{
                                     font-size: 9px;

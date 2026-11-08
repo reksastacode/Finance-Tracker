@@ -6,7 +6,7 @@ and global toast notifications.
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QStackedWidget
 )
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Slot, QByteArray
 
 from src.core.constants import AppColors
 from src.core.event_bus import event_bus
@@ -21,6 +21,7 @@ from src.viewmodels.target_viewmodel import TargetViewModel
 
 # Components & Pages
 from src.views.components.sidebar import SidebarWidget
+from src.views.components.settings_dialog import SettingsDialog
 from src.views.components.toast import ToastWidget
 from src.views.pages.dashboard_view import DashboardView
 from src.views.pages.transaction_view import TransactionInputView
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._bind_events()
         self.setStyleSheet(MAIN_STYLESHEET)
+        self._restore_state()
 
     def _init_viewmodels(self):
         self.dashboard_vm = DashboardViewModel(self)
@@ -81,12 +83,61 @@ class MainWindow(QMainWindow):
     def _bind_events(self):
         # Sidebar click -> switch stacked page
         self.sidebar.page_changed.connect(self.pages_stack.setCurrentIndex)
+        self.sidebar.settings_requested.connect(self.open_settings_dialog)
 
         # Global navigation request -> update sidebar and switch page
         event_bus.navigation_requested.connect(self.navigate_to_page)
 
         # Global toast notification trigger
         event_bus.toast_requested.connect(self.show_toast_notification)
+
+    # ------------------------------------------------------------------
+    # Persistent window state and settings
+    # ------------------------------------------------------------------
+    def _restore_state(self):
+        try:
+            from src.storage.config import get_config
+
+            config = get_config()
+            geometry = config.get("ui.window_geometry", "")
+            if geometry:
+                restored = self.restoreGeometry(
+                    QByteArray.fromBase64(str(geometry).encode("ascii"))
+                )
+                if not restored:
+                    self.resize(1366, 780)
+
+            last_page = int(config.get("ui.last_page", 0) or 0)
+            if 0 <= last_page < self.pages_stack.count():
+                self.sidebar.select_page(last_page)
+                self.pages_stack.setCurrentIndex(last_page)
+        except Exception:
+            self.resize(1366, 780)
+
+    def _save_state(self):
+        try:
+            from src.storage.config import get_config
+
+            geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
+            get_config().update({
+                "ui.window_geometry": geometry,
+                "ui.last_page": self.pages_stack.currentIndex(),
+            })
+        except Exception:
+            pass
+
+    @Slot()
+    def open_settings_dialog(self):
+        dialog = SettingsDialog(self)
+        dialog.preferences_changed.connect(self._apply_preferences)
+        dialog.exec()
+
+    @Slot(dict)
+    def _apply_preferences(self, preferences: dict):
+        if "page_size" in preferences:
+            self.history_vm.set_page_size(int(preferences["page_size"]))
+        if "chart_period" in preferences:
+            self.dashboard_vm.set_chart_period(str(preferences["chart_period"]))
 
     @Slot(int)
     def navigate_to_page(self, page_index: int):
@@ -108,3 +159,8 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+
+    def closeEvent(self, event):
+        self._save_state()
+        self.history_vm.shutdown()
+        super().closeEvent(event)

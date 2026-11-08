@@ -3,10 +3,13 @@ Custom Financial Line Chart Component.
 Uses QPainter and paintEvent to render multi-series charts (Pemasukan, Pengeluaran, Target).
 Draws points up to the current computer date without inaccurate extrapolation.
 """
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QFrame, QSizePolicy
+)
 from PySide6.QtCore import Qt, QPointF, Signal
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QPainterPath
 from src.core.constants import AppColors
+from src.views.components.elided_label import ElidedLabel
 
 class ChartCanvas(QWidget):
     """Inner canvas rendering lines and points via paintEvent."""
@@ -157,29 +160,9 @@ class ChartWidget(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(12)
 
-        title = QLabel("Grafik keuangan")
+        title = ElidedLabel("Grafik keuangan")
         title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; background: transparent; border: none;")
-        header_layout.addWidget(title)
-
-        header_layout.addStretch()
-
-        def make_legend(color, text):
-            frame = QFrame()
-            frame.setStyleSheet("background: transparent; border: none;")
-            fl = QHBoxLayout(frame)
-            fl.setContentsMargins(0, 0, 0, 0)
-            fl.setSpacing(4)
-            dot = QLabel("●")
-            dot.setStyleSheet(f"color: {color}; font-size: 11px; background: transparent; border: none;")
-            lbl = QLabel(text)
-            lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600; background: transparent; border: none;")
-            fl.addWidget(dot)
-            fl.addWidget(lbl)
-            return frame
-
-        header_layout.addWidget(make_legend(AppColors.PEMASUKAN, "Pemasukan"))
-        header_layout.addWidget(make_legend(AppColors.PENGELUARAN, "Pengeluaran"))
-        header_layout.addWidget(make_legend(AppColors.TARGET, "Target"))
+        header_layout.addWidget(title, 1)
 
         # Period Dropdown
         self.period_combo = QComboBox()
@@ -191,8 +174,35 @@ class ChartWidget(QFrame):
 
         layout.addLayout(header_layout)
 
+        # Legends live on their own row so the chart card can shrink.
+        legend_layout = QHBoxLayout()
+        legend_layout.setSpacing(12)
+
+        def make_legend(color, text):
+            frame = QFrame()
+            frame.setMinimumWidth(0)
+            frame.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            frame.setStyleSheet("background: transparent; border: none;")
+            fl = QHBoxLayout(frame)
+            fl.setContentsMargins(0, 0, 0, 0)
+            fl.setSpacing(4)
+            dot = QLabel("●")
+            dot.setFixedWidth(12)
+            dot.setStyleSheet(f"color: {color}; font-size: 11px; background: transparent; border: none;")
+            lbl = ElidedLabel(text)
+            lbl.setStyleSheet(f"font-size: 10px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600; background: transparent; border: none;")
+            fl.addWidget(dot)
+            fl.addWidget(lbl, 1)
+            return frame
+
+        legend_layout.addWidget(make_legend(AppColors.PEMASUKAN, "Pemasukan"), 1)
+        legend_layout.addWidget(make_legend(AppColors.PENGELUARAN, "Pengeluaran"), 1)
+        legend_layout.addWidget(make_legend(AppColors.TARGET, "Target"), 1)
+        layout.addLayout(legend_layout)
+
         # Chart Canvas
         self.canvas = ChartCanvas(self)
+        self.canvas.setMinimumWidth(0)
         layout.addWidget(self.canvas)
 
     def update_chart_data(self, data: dict):

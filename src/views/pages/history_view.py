@@ -6,14 +6,16 @@ and interactive data table with running balances and deletion actions.
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox, QDateEdit,
-    QFileDialog
+    QFileDialog, QLineEdit
 )
-from PySide6.QtCore import Qt, QDate, Slot, QSize
+from PySide6.QtCore import Qt, QDate, Slot, QSize, QUrl
+from PySide6.QtGui import QDesktopServices
 from src.core.constants import AppColors, TransactionType
 from src.core.assets import AppIcons, get_svg_icon, create_svg_label
 from src.viewmodels.history_viewmodel import HistoryViewModel
 from src.views.components.header import HeaderWidget
 from src.views.components.summary_card import SummaryCardWidget
+from src.views.components.elided_label import ElidedLabel
 
 
 class HistoryView(QWidget):
@@ -36,10 +38,10 @@ class HistoryView(QWidget):
         summary_row = QHBoxLayout()
         summary_row.setSpacing(14)
 
-        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp. 10.000.000", svg_icon=AppIcons.HIST_PEMASUKAN)
-        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp. 3.200.000", svg_icon=AppIcons.HIST_PENGELUARAN)
-        self.card_saldo_bersih = SummaryCardWidget("Saldo Bersih", "Rp. 6.800.000", svg_icon=AppIcons.HIST_SALDO_BERSIH)
-        self.card_total_tx = SummaryCardWidget("Jumlah Transaksi", "12 Transaksi", svg_icon=AppIcons.HIST_JUMLAH_TX)
+        self.card_pemasukan = SummaryCardWidget("Total Pemasukan", "Rp 0", svg_icon=AppIcons.HIST_PEMASUKAN)
+        self.card_pengeluaran = SummaryCardWidget("Total Pengeluaran", "Rp 0", svg_icon=AppIcons.HIST_PENGELUARAN)
+        self.card_saldo_bersih = SummaryCardWidget("Saldo Bersih", "Rp 0", svg_icon=AppIcons.HIST_SALDO_BERSIH)
+        self.card_total_tx = SummaryCardWidget("Jumlah Transaksi", "0 Transaksi", svg_icon=AppIcons.HIST_JUMLAH_TX)
 
         summary_row.addWidget(self.card_pemasukan)
         summary_row.addWidget(self.card_pengeluaran)
@@ -49,16 +51,45 @@ class HistoryView(QWidget):
 
         # 3. Filter Bar
         filter_card = QFrame()
+        filter_card.setObjectName("historyFilterCard")
         filter_card.setStyleSheet(f"""
-            QFrame {{
+            QFrame#historyFilterCard {{
                 background-color: {AppColors.CARD_BG};
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 12px;
             }}
+            QFrame#historyFilterCard QLabel {{
+                background: transparent;
+                border: none;
+            }}
         """)
-        f_layout = QHBoxLayout(filter_card)
-        f_layout.setContentsMargins(16, 12, 16, 12)
-        f_layout.setSpacing(12)
+        f_outer = QVBoxLayout(filter_card)
+        f_outer.setContentsMargins(16, 10, 16, 10)
+        f_outer.setSpacing(8)
+
+        # Two rows keep the filter usable on 1280x720 without clipping.
+        f_row1 = QHBoxLayout()
+        f_row1.setSpacing(12)
+        f_row2 = QHBoxLayout()
+        f_row2.setSpacing(12)
+
+        # Filter 0: Free-text search (matches notes and category)
+        c0 = QVBoxLayout()
+        c0.setSpacing(2)
+        search_hdr = QHBoxLayout()
+        search_hdr.setSpacing(4)
+        search_hdr.addWidget(create_svg_label(AppIcons.UTIL_SEARCH, 13, 13))
+        search_hdr.addWidget(QLabel("Cari", styleSheet="font-size: 11px; font-weight: 600; color: #4A5568;"))
+        search_hdr.addStretch()
+        c0.addLayout(search_hdr)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Cari keterangan/kategori...")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.setFixedHeight(34)
+        self.search_input.textChanged.connect(self.vm.set_search_text)
+        self.search_input.returnPressed.connect(self._on_filter_clicked)
+        c0.addWidget(self.search_input)
+        f_row1.addLayout(c0, 2)
 
         # Filter 1: Jenis Transaksi
         c1 = QVBoxLayout()
@@ -68,7 +99,7 @@ class HistoryView(QWidget):
         self.combo_type.addItems(["Semua", "Pemasukan", "Pengeluaran", "Target"])
         self.combo_type.setFixedHeight(34)
         c1.addWidget(self.combo_type)
-        f_layout.addLayout(c1, 1)
+        f_row1.addLayout(c1, 1)
 
         # Filter 2: Kategori
         c2 = QVBoxLayout()
@@ -78,7 +109,7 @@ class HistoryView(QWidget):
         self.combo_cat.addItems(["Semua"])
         self.combo_cat.setFixedHeight(34)
         c2.addWidget(self.combo_cat)
-        f_layout.addLayout(c2, 1)
+        f_row1.addLayout(c2, 1)
 
         # Filter 3: Tanggal Mulai
         c3 = QVBoxLayout()
@@ -96,7 +127,7 @@ class HistoryView(QWidget):
         self.start_date_edit.setDisplayFormat("dd/MM/yyyy")
         self.start_date_edit.setFixedHeight(34)
         c3.addWidget(self.start_date_edit)
-        f_layout.addLayout(c3, 1)
+        f_row2.addLayout(c3, 1)
 
         # Filter 4: Tanggal Akhir
         c4 = QVBoxLayout()
@@ -113,7 +144,7 @@ class HistoryView(QWidget):
         self.end_date_edit.setDisplayFormat("dd/MM/yyyy")
         self.end_date_edit.setFixedHeight(34)
         c4.addWidget(self.end_date_edit)
-        f_layout.addLayout(c4, 1)
+        f_row2.addLayout(c4, 1)
 
         # Action Buttons (Filter & Ekspor CSV)
         btn_box = QVBoxLayout()
@@ -178,8 +209,10 @@ class HistoryView(QWidget):
         actions_row.addWidget(self.export_btn)
 
         btn_box.addLayout(actions_row)
-        f_layout.addLayout(btn_box)
+        f_row2.addLayout(btn_box, 1)
 
+        f_outer.addLayout(f_row1)
+        f_outer.addLayout(f_row2)
         main_layout.addWidget(filter_card)
 
         # 4. Table Widget
@@ -205,13 +238,14 @@ class HistoryView(QWidget):
 
         # 5. Pagination & Memory-Efficient Windowing Bar
         self.pagination_bar = QFrame()
+        self.pagination_bar.setObjectName("historyPaginationBar")
         self.pagination_bar.setStyleSheet(f"""
-            QFrame {{
+            QFrame#historyPaginationBar {{
                 background-color: {AppColors.CARD_BG};
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 10px;
             }}
-            QLabel {{
+            QFrame#historyPaginationBar QLabel {{
                 background: transparent;
                 border: none;
             }}
@@ -221,7 +255,7 @@ class HistoryView(QWidget):
         p_layout.setSpacing(10)
 
         # Info Label
-        self.page_info_lbl = QLabel("Menampilkan 0 - 0 dari 0 transaksi")
+        self.page_info_lbl = ElidedLabel("Menampilkan 0 - 0 dari 0 transaksi")
         self.page_info_lbl.setStyleSheet(f"font-size: 12px; color: {AppColors.TEXT_SECONDARY}; font-weight: 600;")
         p_layout.addWidget(self.page_info_lbl)
         p_layout.addStretch()
@@ -260,7 +294,7 @@ class HistoryView(QWidget):
         self.btn_prev_page = make_page_btn("< Prev")
         self.btn_prev_page.clicked.connect(self.vm.prev_page)
 
-        self.page_badge_lbl = QLabel("Halaman 1 / 1")
+        self.page_badge_lbl = ElidedLabel("Halaman 1 / 1")
         self.page_badge_lbl.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {AppColors.TEXT_PRIMARY}; padding: 0 8px;")
 
         self.btn_next_page = make_page_btn("Next >")
@@ -297,14 +331,33 @@ class HistoryView(QWidget):
 
     def _on_export_csv_clicked(self):
         """Asynchronously exports filtered transactions to a CSV file."""
+        try:
+            from src.storage.paths import storage_paths
+
+            default_path = str(storage_paths.exports_dir / "riwayat_transaksi.csv")
+        except Exception:
+            default_path = "riwayat_transaksi.csv"
+
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Ekspor Riwayat Transaksi",
-            "riwayat_transaksi.csv",
+            default_path,
             "CSV Files (*.csv)"
         )
         if path:
             self.vm.export_transactions_async(path)
+
+    def _open_attachment(self, attachment: dict):
+        """Decrypts an attachment to a temporary file and opens it."""
+        try:
+            from src.storage.attachments import get_attachment_service
+
+            path = get_attachment_service().materialize(attachment)
+            opened = QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+            if not opened:
+                self.vm.notify_toast(f"Lampiran tersedia di: {path}", "info")
+        except Exception as exc:
+            self.vm.notify_toast(f"Gagal membuka lampiran: {exc}", "error")
 
     @Slot(bool)
     def _on_busy_state_changed(self, is_busy: bool):
@@ -435,6 +488,31 @@ class HistoryView(QWidget):
             cell_widget = QWidget()
             cw_l = QHBoxLayout(cell_widget)
             cw_l.setContentsMargins(0, 0, 0, 0)
+            cw_l.setSpacing(4)
             cw_l.setAlignment(Qt.AlignCenter)
+
+            attachment = tx.get("attachment")
+            if attachment:
+                attach_btn = QPushButton()
+                attach_btn.setIcon(get_svg_icon(AppIcons.UTIL_PAPERCLIP, 14, 14))
+                attach_btn.setIconSize(QSize(14, 14))
+                attach_btn.setFixedSize(26, 24)
+                attach_btn.setCursor(Qt.PointingHandCursor)
+                attach_btn.setToolTip(f"Buka lampiran: {attachment.get('original_name', '')}")
+                attach_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #E8F0FE;
+                        border-radius: 4px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: #D2E3FC;
+                    }
+                """)
+                attach_btn.clicked.connect(
+                    lambda checked, att=attachment: self._open_attachment(att)
+                )
+                cw_l.addWidget(attach_btn)
+
             cw_l.addWidget(del_btn)
             self.table.setCellWidget(row, 6, cell_widget)

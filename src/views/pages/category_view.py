@@ -29,11 +29,16 @@ class CategoryDialog(QDialog):
         main_layout.setContentsMargins(10, 10, 10, 10)
 
         box = QFrame()
+        box.setObjectName("categoryDialogBox")
         box.setStyleSheet(f"""
-            QFrame {{
+            QFrame#categoryDialogBox {{
                 background-color: #FFFFFF;
                 border: 1px solid {AppColors.BORDER_CARD};
                 border-radius: 16px;
+            }}
+            QFrame#categoryDialogBox QLabel {{
+                background: transparent;
+                border: none;
             }}
         """)
         box_layout = QVBoxLayout(box)

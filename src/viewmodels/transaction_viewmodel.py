@@ -63,7 +63,15 @@ class TransactionViewModel(BaseViewModel):
         return True
 
     @Slot(str, str, str, str, str)
-    def save_transaction(self, tx_type: str, raw_amount: str, category: str, tx_date: str, notes: str):
+    def save_transaction(
+        self,
+        tx_type: str,
+        raw_amount: str,
+        category: str,
+        tx_date: str,
+        notes: str,
+        attachment_path: str = "",
+    ):
         """Handles submission event of a new transaction."""
         amount = parse_rupiah(raw_amount)
         if amount <= 0:
@@ -76,14 +84,21 @@ class TransactionViewModel(BaseViewModel):
             self.notify_toast("Silakan pilih kategori!", "warning")
             return
 
-        # Add to mock store
-        mock_store.add_transaction(
-            tx_type=tx_type,
-            category=category,
-            amount=amount,
-            tx_date=tx_date or format_short_date(),
-            notes=notes.strip()
-        )
+        # Add to mock store (attachment copy + encryption is transactional
+        # from the user's point of view: a failed copy removes the new row).
+        try:
+            mock_store.add_transaction(
+                tx_type=tx_type,
+                category=category,
+                amount=amount,
+                tx_date=tx_date or format_short_date(),
+                notes=notes.strip(),
+                attachment_path=attachment_path,
+            )
+        except Exception as exc:
+            self.transaction_saved.emit(False, str(exc))
+            self.notify_toast(f"Gagal menyimpan lampiran: {exc}", "error")
+            return
 
         # Notify global bus
         self.notify_data_changed()

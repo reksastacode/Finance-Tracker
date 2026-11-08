@@ -60,6 +60,12 @@ class AppIcons:
     TARGET_TANGGAL = os.path.join(ASSETS_DIR, "5. TARGET KEUANGAN", "Tanggal Icon (Tambah Target Keuangan Menu).svg")
     TARGET_AKTIVITAS = os.path.join(ASSETS_DIR, "5. TARGET KEUANGAN", "Aktivitas Terbaru Icon (Target Keuangan Menu).svg")
 
+    # 6. LOCAL STORAGE / UTILITIES
+    STORAGE_DIR = os.path.join(ASSETS_DIR, "6. STORAGE")
+    UTIL_PAPERCLIP = os.path.join(STORAGE_DIR, "Paperclip Icon (Storage).svg")
+    UTIL_SETTINGS = os.path.join(STORAGE_DIR, "Settings Icon (Storage).svg")
+    UTIL_SEARCH = os.path.join(STORAGE_DIR, "Search Icon (Storage).svg")
+
 
 # =========================================================================
 # GRAPHIC OBJECT & RESOURCE MANAGEMENT
