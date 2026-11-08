@@ -8,6 +8,7 @@ README.md
 \tools
 \notes
 **/__pycache__/**
+*.py[cod]
 *.pyc
 \data 
 
